@@ -1,3 +1,4 @@
+# src/core/models.py
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -24,6 +25,7 @@ class Position(BaseModel):
     symbol: str
     quantity: float = 0.0
     average_entry_price: float = 0.0
+    entry_time: datetime | None = None
     current_price: float = 0.0
     unrealized_pnl: float = 0.0
     realized_pnl: float = 0.0

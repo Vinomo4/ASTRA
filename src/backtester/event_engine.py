@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import deque
+from datetime import datetime
 
 import pandas as pd
 
@@ -73,6 +74,7 @@ class BacktestEngine:
             )
             signal = self.strategy.on_bar(bar_event)
 
+            # --- LONG ENTRY EXECUTION ---
             if signal and signal.signal_type == SignalType.LONG and current_position.quantity == 0:
                 order = self.sizer.size_order(signal, total_equity, current_price, current_atr)
                 if order:
@@ -82,8 +84,10 @@ class BacktestEngine:
                         self.capital -= cost
                         current_position.quantity = fill.quantity
                         current_position.average_entry_price = fill.fill_price
+                        current_position.entry_time = fill.timestamp  # 1. Capture entry timestamp
                         self.positions[symbol] = current_position
 
+            # --- EXIT / SELL EXECUTION ---
             elif signal and signal.signal_type == SignalType.EXIT and current_position.quantity > 0:
                 order = OrderEvent(
                     timestamp=current_time,
@@ -106,7 +110,8 @@ class BacktestEngine:
                         trade_id=f"T_{len(self.trades) + 1}",
                         symbol=symbol,
                         side=OrderSide.BUY,
-                        entry_time=current_time,
+                        entry_time=current_position.entry_time
+                        or current_time,  # 2. Use recorded entry timestamp
                         exit_time=current_time,
                         entry_price=current_position.average_entry_price,
                         exit_price=fill.fill_price,
@@ -117,8 +122,10 @@ class BacktestEngine:
                         slippage_cost=fill.slippage,
                     )
                 )
+                # 3. Cleanly reset position state
                 current_position.quantity = 0.0
                 current_position.average_entry_price = 0.0
+                current_position.entry_time = None
                 self.positions[symbol] = current_position
 
         equity_df = pd.DataFrame(self.equity_history).set_index("timestamp")["equity"]
