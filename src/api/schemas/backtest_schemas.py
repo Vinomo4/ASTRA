@@ -14,6 +14,8 @@ class BacktestRequest(BaseModel):
     fast_ema: int = Field(default=20, ge=2, le=100)
     slow_ema: int = Field(default=50, ge=5, le=300)
     risk_fraction: float = Field(default=0.01, ge=0.001, le=0.1)
+    atr_multiplier_sl: float = Field(default=2.0, ge=0.5, le=10.0)
+    atr_multiplier_tp: float = Field(default=4.0, ge=1.0, le=20.0)
 
 
 class EquityPoint(BaseModel):
@@ -45,6 +47,7 @@ class ExecutionMarker(BaseModel):
     price: float
     side: OrderSide
     quantity: float
+    reason: str = "SIGNAL"
 
 
 class ActivePosition(BaseModel):
@@ -55,6 +58,8 @@ class ActivePosition(BaseModel):
     quantity: float
     unrealized_pnl: float
     unrealized_pnl_pct: float
+    stop_loss: float | None = None
+    take_profit: float | None = None
 
 
 class TradeItem(BaseModel):
@@ -68,6 +73,7 @@ class TradeItem(BaseModel):
     quantity: float
     pnl: float
     pnl_pct: float
+    exit_reason: str = "SIGNAL"
 
 
 class BacktestResponse(BaseModel):

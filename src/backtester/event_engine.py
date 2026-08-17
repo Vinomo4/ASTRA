@@ -38,17 +38,83 @@ class BacktestEngine:
         commission_rate: float = 0.0005,
         slippage_rate: float = 0.0002,
         risk_fraction: float = 0.01,
+        atr_multiplier_sl: float = 2.0,
+        atr_multiplier_tp: float = 4.0,
     ) -> None:
         self.strategy = strategy
         self.initial_capital = initial_capital
         self.capital = initial_capital
         self.broker = SimulatedBroker(commission_rate=commission_rate)
-        self.sizer = VolatilityPositionSizer(risk_fraction=risk_fraction)
+        self.sizer = VolatilityPositionSizer(
+            risk_fraction=risk_fraction,
+            atr_multiplier_sl=atr_multiplier_sl,
+            atr_multiplier_tp=atr_multiplier_tp,
+        )
         self.positions: dict[str, Position] = {}
         self.trades: list[TradeRecord] = []
         self.executions: list[dict[str, object]] = []
         self.equity_history: list[dict[str, object]] = []
         self.snapshots: list[dict[str, object]] = []
+        self.pending_order: OrderEvent | None = None
+
+    def _close_position(
+        self,
+        position: Position,
+        exit_price: float,
+        timestamp: datetime,
+        reason: str,
+    ) -> None:
+        order = OrderEvent(
+            timestamp=timestamp,
+            symbol=position.symbol,
+            order_type=OrderType.MARKET,
+            side=OrderSide.SELL,
+            quantity=position.quantity,
+        )
+        fill = self.broker.execute_order(order, exit_price)
+        revenue = (fill.fill_price * fill.quantity) - fill.commission
+        self.capital += revenue
+
+        pnl = (fill.fill_price - position.average_entry_price) * fill.quantity - fill.commission
+        pnl_pct = (fill.fill_price / position.average_entry_price) - 1.0
+
+        time_str = (
+            timestamp.strftime("%Y-%m-%d") if hasattr(timestamp, "strftime") else str(timestamp)
+        )
+
+        self.trades.append(
+            TradeRecord(
+                trade_id=f"T_{len(self.trades) + 1}",
+                symbol=position.symbol,
+                side=OrderSide.BUY,
+                entry_time=position.entry_time or timestamp,
+                exit_time=timestamp,
+                entry_price=position.average_entry_price,
+                exit_price=fill.fill_price,
+                quantity=fill.quantity,
+                pnl=pnl,
+                pnl_pct=pnl_pct,
+                commission_paid=fill.commission,
+                slippage_cost=fill.slippage,
+                exit_reason=reason,
+            )
+        )
+
+        self.executions.append(
+            {
+                "time": time_str,
+                "price": round(fill.fill_price, 2),
+                "side": OrderSide.SELL,
+                "quantity": round(fill.quantity, 4),
+                "reason": reason,
+            }
+        )
+
+        position.quantity = 0.0
+        position.average_entry_price = 0.0
+        position.entry_time = None
+        position.stop_loss = None
+        position.take_profit = None
 
     def run(self, df: pd.DataFrame) -> dict[str, object]:
         data = df.copy().sort_values("timestamp").reset_index(drop=True)
@@ -58,24 +124,86 @@ class BacktestEngine:
 
         for _, row in data.iterrows():
             current_time = row["timestamp"]
-            current_price = float(row["close"])
+            open_price = float(row["open"])
+            high_price = float(row["high"])
+            low_price = float(row["low"])
+            close_price = float(row["close"])
+            volume = float(row["volume"])
             symbol = str(row["symbol"])
             current_atr = float(row["atr"])
 
             current_position = self.positions.get(symbol, Position(symbol=symbol))
-            current_position.update_market_price(current_price)
 
-            total_equity = self.capital + (current_position.quantity * current_price)
+            # -------------------------------------------------------------
+            # 1. PROCESS PENDING ORDERS AT BAR t OPEN (Next-Bar Execution)
+            # -------------------------------------------------------------
+            if self.pending_order and self.pending_order.symbol == symbol:
+                if self.pending_order.side == OrderSide.BUY and current_position.quantity == 0:
+                    fill = self.broker.execute_order(self.pending_order, open_price)
+                    cost = (fill.fill_price * fill.quantity) + fill.commission
+                    if self.capital >= cost:
+                        self.capital -= cost
+                        current_position.quantity = fill.quantity
+                        current_position.average_entry_price = fill.fill_price
+                        current_position.entry_time = current_time
+                        current_position.stop_loss = self.pending_order.stop_loss
+                        current_position.take_profit = self.pending_order.take_profit
+                        self.positions[symbol] = current_position
+
+                        time_str = (
+                            current_time.strftime("%Y-%m-%d")
+                            if hasattr(current_time, "strftime")
+                            else str(current_time)
+                        )
+                        self.executions.append(
+                            {
+                                "time": time_str,
+                                "price": round(fill.fill_price, 2),
+                                "side": OrderSide.BUY,
+                                "quantity": round(fill.quantity, 4),
+                                "reason": "SIGNAL_ENTRY",
+                            }
+                        )
+
+                elif self.pending_order.side == OrderSide.SELL and current_position.quantity > 0:
+                    self._close_position(current_position, open_price, current_time, "SIGNAL_EXIT")
+
+                self.pending_order = None
+
+            # -------------------------------------------------------------
+            # 2. CHECK INTRA-BAR BRACKET EXITS (SL / TP)
+            # -------------------------------------------------------------
+            if current_position.quantity > 0:
+                # Stop Loss Triggered
+                if (
+                    current_position.stop_loss is not None
+                    and low_price <= current_position.stop_loss
+                ):
+                    exit_price = min(open_price, current_position.stop_loss)
+                    self._close_position(current_position, exit_price, current_time, "STOP_LOSS")
+
+                # Take Profit Triggered
+                elif (
+                    current_position.take_profit is not None
+                    and high_price >= current_position.take_profit
+                ):
+                    exit_price = max(open_price, current_position.take_profit)
+                    self._close_position(current_position, exit_price, current_time, "TAKE_PROFIT")
+
+            # -------------------------------------------------------------
+            # 3. MARK-TO-MARKET PORTFOLIO SNAPSHOT (at Bar t Close)
+            # -------------------------------------------------------------
+            current_position.update_market_price(close_price)
+            total_equity = self.capital + (current_position.quantity * close_price)
             if total_equity > peak_equity:
                 peak_equity = total_equity
 
             drawdown_pct = ((total_equity - peak_equity) / peak_equity) * 100.0
-
-            unrealized_pnl = 0.0
-            if current_position.quantity > 0:
-                unrealized_pnl = (
-                    current_price - current_position.average_entry_price
-                ) * current_position.quantity
+            unrealized_pnl = (
+                (close_price - current_position.average_entry_price) * current_position.quantity
+                if current_position.quantity > 0
+                else 0.0
+            )
 
             time_str = (
                 current_time.strftime("%Y-%m-%d")
@@ -96,89 +224,36 @@ class BacktestEngine:
                 }
             )
 
+            # -------------------------------------------------------------
+            # 4. STRATEGY EVALUATION (Generates Order for Bar t+1)
+            # -------------------------------------------------------------
             bar_event = MarketDataEvent(
                 timestamp=current_time,
                 symbol=symbol,
-                open=float(row["open"]),
-                high=float(row["high"]),
-                low=float(row["low"]),
-                close=current_price,
-                volume=float(row["volume"]),
+                open=open_price,
+                high=high_price,
+                low=low_price,
+                close=close_price,
+                volume=volume,
             )
             signal = self.strategy.on_bar(bar_event)
 
-            # --- LONG ENTRY EXECUTION ---
             if signal and signal.signal_type == SignalType.LONG and current_position.quantity == 0:
-                order = self.sizer.size_order(signal, total_equity, current_price, current_atr)
-                if order:
-                    fill = self.broker.execute_order(order, current_price)
-                    cost = (fill.fill_price * fill.quantity) + fill.commission
-                    if self.capital >= cost:
-                        self.capital -= cost
-                        current_position.quantity = fill.quantity
-                        current_position.average_entry_price = fill.fill_price
-                        current_position.entry_time = fill.timestamp
-                        self.positions[symbol] = current_position
-
-                        self.executions.append(
-                            {
-                                "time": time_str,
-                                "price": round(fill.fill_price, 2),
-                                "side": OrderSide.BUY,
-                                "quantity": round(fill.quantity, 4),
-                            }
-                        )
-
-            # --- EXIT / SELL EXECUTION ---
+                self.pending_order = self.sizer.size_order(
+                    signal, total_equity, close_price, current_atr
+                )
             elif signal and signal.signal_type == SignalType.EXIT and current_position.quantity > 0:
-                order = OrderEvent(
+                self.pending_order = OrderEvent(
                     timestamp=current_time,
                     symbol=symbol,
                     order_type=OrderType.MARKET,
                     side=OrderSide.SELL,
                     quantity=current_position.quantity,
                 )
-                fill = self.broker.execute_order(order, current_price)
-                revenue = (fill.fill_price * fill.quantity) - fill.commission
-                self.capital += revenue
 
-                pnl = (
-                    fill.fill_price - current_position.average_entry_price
-                ) * fill.quantity - fill.commission
-                pnl_pct = (fill.fill_price / current_position.average_entry_price) - 1.0
-
-                self.trades.append(
-                    TradeRecord(
-                        trade_id=f"T_{len(self.trades) + 1}",
-                        symbol=symbol,
-                        side=OrderSide.BUY,
-                        entry_time=current_position.entry_time or current_time,
-                        exit_time=current_time,
-                        entry_price=current_position.average_entry_price,
-                        exit_price=fill.fill_price,
-                        quantity=fill.quantity,
-                        pnl=pnl,
-                        pnl_pct=pnl_pct,
-                        commission_paid=fill.commission,
-                        slippage_cost=fill.slippage,
-                    )
-                )
-
-                self.executions.append(
-                    {
-                        "time": time_str,
-                        "price": round(fill.fill_price, 2),
-                        "side": OrderSide.SELL,
-                        "quantity": round(fill.quantity, 4),
-                    }
-                )
-
-                current_position.quantity = 0.0
-                current_position.average_entry_price = 0.0
-                current_position.entry_time = None
-                self.positions[symbol] = current_position
-
-        # --- EVALUATE ACTIVE OPEN POSITION STATE ---
+        # -------------------------------------------------------------
+        # 5. ACTIVE POSITION & SUMMARY COMPILATION
+        # -------------------------------------------------------------
         active_pos_data = None
         if not data.empty:
             last_price = float(data.iloc[-1]["close"])
@@ -199,6 +274,8 @@ class BacktestEngine:
                         "quantity": round(pos.quantity, 4),
                         "unrealized_pnl": round(unrealized_pnl, 2),
                         "unrealized_pnl_pct": round(unrealized_pnl_pct, 2),
+                        "stop_loss": pos.stop_loss,
+                        "take_profit": pos.take_profit,
                     }
 
         equity_df = pd.DataFrame(self.equity_history).set_index("timestamp")["equity"]
@@ -217,6 +294,7 @@ class BacktestEngine:
             "execution_markers": self.executions,
             "equity_curve": equity_df.to_dict(),
             "snapshots": self.snapshots,
+            "trades": self.trades,
         }
 
 

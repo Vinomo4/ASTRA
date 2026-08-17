@@ -29,6 +29,8 @@ class Position(BaseModel):
     current_price: float = 0.0
     unrealized_pnl: float = 0.0
     realized_pnl: float = 0.0
+    stop_loss: float | None = None
+    take_profit: float | None = None
 
     def update_market_price(self, price: float) -> None:
         self.current_price = price
@@ -62,6 +64,7 @@ class TradeRecord(BaseModel):
     pnl_pct: float
     commission_paid: float
     slippage_cost: float
+    exit_reason: str = "SIGNAL"
 
 
 @dataclass(slots=True)

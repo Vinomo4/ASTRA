@@ -1,3 +1,4 @@
+# src/core/events.py
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -29,6 +30,8 @@ class SignalEvent(Event):
     signal_type: SignalType
     strength: float = 1.0
     strategy_id: str = "default_strategy"
+    stop_loss: float | None = None
+    take_profit: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,6 +41,9 @@ class OrderEvent(Event):
     order_type: OrderType
     side: OrderSide
     quantity: float
+    stop_loss: float | None = None
+    take_profit: float | None = None
+    target_price: float | None = None
     price_limit: float | None = None
     stop_price: float | None = None
 
@@ -49,5 +55,15 @@ class FillEvent(Event):
     side: OrderSide
     quantity: float
     fill_price: float
-    commission: float
-    slippage: float
+    commission: float = 0.0
+    slippage: float = 0.0
+    order_type: OrderType = OrderType.MARKET
+
+
+__all__ = [
+    "Event",
+    "MarketDataEvent",
+    "SignalEvent",
+    "OrderEvent",
+    "FillEvent",
+]

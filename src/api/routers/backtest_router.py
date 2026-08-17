@@ -43,12 +43,14 @@ async def run_backtest(req: BacktestRequest) -> BacktestResponse:
             detail=f"No market data found for symbol {req.symbol} in the requested range.",
         )
 
-    # 2. Run Backtest
+    # 2. Run Backtest with Next-Bar Execution & ATR Bracket Multipliers
     strategy = TrendFollowingStrategy(fast_ema=req.fast_ema, slow_ema=req.slow_ema)
     engine = BacktestEngine(
         strategy=strategy,
         initial_capital=req.initial_capital,
         risk_fraction=req.risk_fraction,
+        atr_multiplier_sl=req.atr_multiplier_sl,
+        atr_multiplier_tp=req.atr_multiplier_tp,
     )
 
     results = engine.run(df)
@@ -100,6 +102,7 @@ async def run_backtest(req: BacktestRequest) -> BacktestResponse:
             quantity=round(float(t.quantity), 4),
             pnl=round(float(t.pnl), 2),
             pnl_pct=round(float(t.pnl_pct * 100), 2),
+            exit_reason=t.exit_reason,
         )
         for t in engine.trades
     ]

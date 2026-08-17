@@ -9,8 +9,6 @@ import {
   Play, 
   BarChart3,
   Clock,
-  ArrowUpRight,
-  ArrowDownRight,
   Coins,
   Building2,
   AlertCircle,
@@ -27,7 +25,8 @@ import {
   YAxis, 
   Tooltip, 
   CartesianGrid,
-  ReferenceDot
+  ReferenceDot,
+  ReferenceLine
 } from 'recharts';
 
 interface OHLCPoint {
@@ -54,6 +53,7 @@ interface ExecutionMarker {
   price: number;
   side: 'BUY' | 'SELL';
   quantity: number;
+  reason?: string;
 }
 
 interface ActivePosition {
@@ -64,6 +64,8 @@ interface ActivePosition {
   quantity: number;
   unrealized_pnl: number;
   unrealized_pnl_pct: number;
+  stop_loss?: number | null;
+  take_profit?: number | null;
 }
 
 interface TradeItem {
@@ -77,6 +79,7 @@ interface TradeItem {
   quantity: number;
   pnl: number;
   pnl_pct: number;
+  exit_reason: string;
 }
 
 interface BacktestResult {
@@ -120,7 +123,7 @@ const ASSET_PRESETS = [
   { symbol: 'SOL-USD', label: 'Solana (USD)', type: 'crypto' },
 ];
 
-// Custom Candlestick SVG Shape with pointer events disabled
+// --- Custom Candlestick SVG ---
 const CandlestickShape = memo((props: any) => {
   const { x, width, payload, background, priceDomain } = props;
   if (!payload || !priceDomain || priceDomain[0] === priceDomain[1]) return null;
@@ -157,7 +160,74 @@ const CandlestickShape = memo((props: any) => {
   );
 });
 
-// Fast Tooltip Bridge calling direct DOM updates
+// --- Custom Execution Marker Shapes ---
+const ExecutionMarkerShape = memo((props: any) => {
+  const { cx, cy, marker } = props;
+  if (cx == null || cy == null || isNaN(cx) || isNaN(cy)) return null;
+
+  const reason = marker?.reason || (marker?.side === 'BUY' ? 'SIGNAL_ENTRY' : 'SIGNAL_EXIT');
+
+  // 1. Buy Entry: Upward Green Triangle
+  if (marker.side === 'BUY' || reason === 'SIGNAL_ENTRY') {
+    return (
+      <g style={{ pointerEvents: 'none' }}>
+        <polygon
+          points={`${cx},${cy - 9} ${cx - 7},${cy + 5} ${cx + 7},${cy + 5}`}
+          fill="#10b981"
+          stroke="#ffffff"
+          strokeWidth={1.5}
+        />
+      </g>
+    );
+  }
+
+  // 2. Take Profit: Emerald Target Diamond
+  if (reason === 'TAKE_PROFIT') {
+    return (
+      <g style={{ pointerEvents: 'none' }}>
+        <polygon
+          points={`${cx},${cy - 8} ${cx + 8},${cy} ${cx},${cy + 8} ${cx - 8},${cy}`}
+          fill="#34d399"
+          stroke="#ffffff"
+          strokeWidth={1.5}
+        />
+        <circle cx={cx} cy={cy} r={2} fill="#064e3b" />
+      </g>
+    );
+  }
+
+  // 3. Stop Loss: Downward Rose Triangle
+  if (reason === 'STOP_LOSS') {
+    return (
+      <g style={{ pointerEvents: 'none' }}>
+        <polygon
+          points={`${cx},${cy + 9} ${cx - 7},${cy - 5} ${cx + 7},${cy - 5}`}
+          fill="#f43f5e"
+          stroke="#ffffff"
+          strokeWidth={1.5}
+        />
+      </g>
+    );
+  }
+
+  // 4. Standard Signal Exit: Indigo Square
+  return (
+    <g style={{ pointerEvents: 'none' }}>
+      <rect
+        x={cx - 5.5}
+        y={cy - 5.5}
+        width={11}
+        height={11}
+        rx={2}
+        fill="#818cf8"
+        stroke="#ffffff"
+        strokeWidth={1.5}
+      />
+    </g>
+  );
+});
+
+// --- Synchronized Tooltip Bridge ---
 const FastTooltipBridge = memo(({ active, payload, onInspect, showOHLC = true }: any) => {
   if (active && payload && payload.length > 0) {
     const data = payload[0].payload as UnifiedDataPoint;
@@ -170,9 +240,9 @@ const FastTooltipBridge = memo(({ active, payload, onInspect, showOHLC = true }:
   const data = payload[0].payload as UnifiedDataPoint;
 
   return (
-    <div className="bg-slate-900/95 border border-slate-700 p-2 rounded-lg shadow-2xl text-xs font-mono backdrop-blur-md pointer-events-none">
-      <div className="text-slate-400 font-sans font-semibold mb-1 border-b border-slate-800 pb-1">
-        {data.time}
+    <div className="bg-slate-900/95 border border-slate-700 p-2.5 rounded-lg shadow-2xl text-xs font-mono backdrop-blur-md pointer-events-none">
+      <div className="text-slate-400 font-sans font-semibold mb-1 border-b border-slate-800 pb-1 flex justify-between items-center gap-2">
+        <span>{data.time}</span>
       </div>
       {showOHLC ? (
         <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px]">
@@ -190,22 +260,205 @@ const FastTooltipBridge = memo(({ active, payload, onInspect, showOHLC = true }:
   );
 });
 
+const ActivePositionBanner = memo(({ position }: { position: ActivePosition }) => {
+  const slDistPct = position.stop_loss
+    ? ((position.stop_loss - position.current_price) / position.current_price) * 100
+    : null;
+  const tpDistPct = position.take_profit
+    ? ((position.take_profit - position.current_price) / position.current_price) * 100
+    : null;
+
+  return (
+    <div className="bg-emerald-950/40 border border-emerald-500/50 rounded-xl p-4 mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex items-center gap-3">
+        <div className="p-2 bg-emerald-500/20 rounded-lg text-emerald-400">
+          <AlertCircle size={20} />
+        </div>
+        <div>
+          <h3 className="text-sm font-bold text-white flex items-center gap-2">
+            Active Position: {position.symbol}
+            <span className="text-[11px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded font-mono">
+              LONG
+            </span>
+          </h3>
+          <p className="text-xs text-slate-400">
+            Entered on {position.entry_time} at ${position.entry_price.toFixed(2)} | Current: ${position.current_price.toFixed(2)}
+          </p>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-5 font-mono text-xs">
+        <div>
+          <span className="text-slate-500 block font-sans">Units</span>
+          <span className="text-white font-bold">{position.quantity}</span>
+        </div>
+
+        <div>
+          <span className="text-slate-500 block font-sans">Unrealized P&L</span>
+          <span className={`font-bold ${position.unrealized_pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+            ${position.unrealized_pnl.toFixed(2)} ({position.unrealized_pnl_pct >= 0 ? '+' : ''}{position.unrealized_pnl_pct.toFixed(2)}%)
+          </span>
+        </div>
+
+        {position.stop_loss && (
+          <div className="bg-slate-950/80 px-2.5 py-1 rounded border border-rose-900/60">
+            <span className="text-[10px] text-rose-400 block font-sans font-semibold">Stop Loss</span>
+            <span className="text-white font-bold">${position.stop_loss.toFixed(2)}</span>
+            <span className="text-[10px] text-rose-400 ml-1">({slDistPct?.toFixed(1)}%)</span>
+          </div>
+        )}
+
+        {position.take_profit && (
+          <div className="bg-slate-950/80 px-2.5 py-1 rounded border border-emerald-900/60">
+            <span className="text-[10px] text-emerald-400 block font-sans font-semibold">Take Profit</span>
+            <span className="text-white font-bold">${position.take_profit.toFixed(2)}</span>
+            <span className="text-[10px] text-emerald-400 ml-1">(+{tpDistPct?.toFixed(1)}%)</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+});
+
+const KPIGrid = memo(({ results }: { results: BacktestResult }) => (
+  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+    <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl">
+      <div className="flex items-center gap-2 text-slate-400 text-xs font-semibold mb-1">
+        <DollarSign size={16} className="text-emerald-400" /> Final Equity
+      </div>
+      <div className="text-xl font-bold text-white">
+        ${results.final_equity.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+      </div>
+      <div className={`text-xs mt-1 font-semibold ${results.total_return_pct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+        {results.total_return_pct >= 0 ? '+' : ''}{results.total_return_pct.toFixed(2)}% Total Return
+      </div>
+    </div>
+
+    <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl">
+      <div className="flex items-center gap-2 text-slate-400 text-xs font-semibold mb-1">
+        <TrendingUp size={16} className="text-blue-400" /> CAGR
+      </div>
+      <div className="text-xl font-bold text-white">{results.cagr.toFixed(2)}%</div>
+      <div className="text-xs text-slate-500 mt-1">Annualized Return</div>
+    </div>
+
+    <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl">
+      <div className="flex items-center gap-2 text-slate-400 text-xs font-semibold mb-1">
+        <Activity size={16} className="text-purple-400" /> Sharpe Ratio
+      </div>
+      <div className="text-xl font-bold text-white">{results.sharpe_ratio.toFixed(2)}</div>
+      <div className="text-xs text-slate-500 mt-1">Sortino: {results.sortino_ratio.toFixed(2)}</div>
+    </div>
+
+    <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl">
+      <div className="flex items-center gap-2 text-slate-400 text-xs font-semibold mb-1">
+        <ShieldAlert size={16} className="text-rose-400" /> Max Drawdown
+      </div>
+      <div className="text-xl font-bold text-rose-400">{results.max_drawdown_pct.toFixed(2)}%</div>
+      <div className="text-xs text-slate-500 mt-1">Peak-to-Trough Loss</div>
+    </div>
+
+    <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl">
+      <div className="flex items-center gap-2 text-slate-400 text-xs font-semibold mb-1">
+        <BarChart3 size={16} className="text-amber-400" /> Closed Trades
+      </div>
+      <div className="text-xl font-bold text-white">{results.total_trades}</div>
+      <div className="text-xs text-slate-500 mt-1">
+        {results.active_position ? '1 Active Position' : 'No Active Positions'}
+      </div>
+    </div>
+  </div>
+));
+
+const getExitBadge = (reason: string) => {
+  switch (reason) {
+    case 'TAKE_PROFIT':
+      return <span className="bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-semibold px-2 py-0.5 rounded text-[10px]">TAKE PROFIT</span>;
+    case 'STOP_LOSS':
+      return <span className="bg-rose-500/20 border border-rose-500/40 text-rose-300 font-semibold px-2 py-0.5 rounded text-[10px]">STOP LOSS</span>;
+    default:
+      return <span className="bg-indigo-500/20 border border-indigo-500/40 text-indigo-300 font-semibold px-2 py-0.5 rounded text-[10px]">SIGNAL EXIT</span>;
+  }
+};
+
+const TradeAuditTable = memo(({ trades }: { trades: TradeItem[] }) => (
+  <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+    <div className="p-4 border-b border-slate-800 flex justify-between items-center">
+      <h2 className="text-base font-semibold text-white">Closed Trades Audit Log</h2>
+      <span className="text-xs text-slate-400">Total Closed: {trades.length} positions</span>
+    </div>
+    <div className="overflow-x-auto">
+      <table className="w-full text-left text-sm">
+        <thead className="bg-slate-800/50 text-slate-400 text-xs uppercase font-semibold">
+          <tr>
+            <th className="p-3">ID</th>
+            <th className="p-3">Symbol</th>
+            <th className="p-3">Side</th>
+            <th className="p-3">Exit Trigger</th>
+            <th className="p-3">Entry Date</th>
+            <th className="p-3">Exit Date</th>
+            <th className="p-3">Entry ($)</th>
+            <th className="p-3">Exit ($)</th>
+            <th className="p-3">Units</th>
+            <th className="p-3">P&L ($)</th>
+            <th className="p-3">Return (%)</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-800 font-mono text-xs">
+          {trades.length === 0 ? (
+            <tr>
+              <td colSpan={11} className="p-4 text-center text-slate-500 font-sans">
+                No closed trades completed in this date range.
+              </td>
+            </tr>
+          ) : (
+            trades.map((t) => (
+              <tr key={t.trade_id} className="hover:bg-slate-800/30">
+                <td className="p-3 text-slate-400">{t.trade_id}</td>
+                <td className="p-3 font-semibold text-white font-sans">{t.symbol}</td>
+                <td className="p-3">
+                  <span className="bg-emerald-500/20 text-emerald-300 font-semibold px-2 py-0.5 rounded text-[11px]">
+                    {t.side}
+                  </span>
+                </td>
+                <td className="p-3 font-sans">{getExitBadge(t.exit_reason)}</td>
+                <td className="p-3 text-slate-300">{t.entry_time}</td>
+                <td className="p-3 text-slate-300">{t.exit_time}</td>
+                <td className="p-3 text-slate-300">${t.entry_price.toFixed(2)}</td>
+                <td className="p-3 text-slate-300">${t.exit_price.toFixed(2)}</td>
+                <td className="p-3 text-slate-300">{t.quantity}</td>
+                <td className={`p-3 font-semibold ${t.pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  ${t.pnl.toFixed(2)}
+                </td>
+                <td className={`p-3 font-semibold ${t.pnl_pct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {t.pnl_pct >= 0 ? '+' : ''}{t.pnl_pct.toFixed(2)}%
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  </div>
+));
+
 export default function App() {
   const [params, setParams] = useState({
-    symbol: 'NVDA',
+    symbol: 'BTC-USD',
     start_date: '2023-01-01',
     end_date: '2024-01-01',
     initial_capital: 100000,
     fast_ema: 20,
     slow_ema: 50,
     risk_fraction: 0.01,
+    atr_multiplier_sl: 2.0,
+    atr_multiplier_tp: 4.0,
   });
 
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<BacktestResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Direct DOM Refs for 0ms inspector updates
   const badgeRef = useRef<HTMLSpanElement>(null);
   const dateRef = useRef<HTMLSpanElement>(null);
   const equityRef = useRef<HTMLParagraphElement>(null);
@@ -315,7 +568,7 @@ export default function App() {
           <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
             <Activity className="text-emerald-500" /> Quantitative Strategy Dashboard
           </h1>
-          <p className="text-sm text-slate-400">Japanese Candlestick Execution & Synchronized Portfolio Inspector</p>
+          <p className="text-sm text-slate-400">Next-Bar Execution, ATR Risk Brackets & Point-in-Time Accounting</p>
         </div>
 
         <div className="flex flex-wrap gap-2">
@@ -336,9 +589,9 @@ export default function App() {
         </div>
       </header>
 
-      {/* Input Parameters Form */}
+      {/* Control Panel */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 mb-8 shadow-sm">
-        <form onSubmit={handleRunBacktest} className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-7 gap-4">
+        <form onSubmit={handleRunBacktest} className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-9 gap-3">
           <div>
             <label className="block text-xs font-semibold text-slate-400 mb-1">Asset Symbol</label>
             <input 
@@ -399,13 +652,35 @@ export default function App() {
             />
           </div>
 
+          <div>
+            <label className="block text-xs font-semibold text-rose-400 mb-1">SL ATR (x)</label>
+            <input 
+              type="number" 
+              step="0.1"
+              value={params.atr_multiplier_sl} 
+              onChange={(e) => setParams({ ...params, atr_multiplier_sl: Number(e.target.value) })}
+              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-rose-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-emerald-400 mb-1">TP ATR (x)</label>
+            <input 
+              type="number" 
+              step="0.1"
+              value={params.atr_multiplier_tp} 
+              onChange={(e) => setParams({ ...params, atr_multiplier_tp: Number(e.target.value) })}
+              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500"
+            />
+          </div>
+
           <div className="flex items-end">
             <button 
               type="submit" 
               disabled={loading}
-              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-medium py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition disabled:opacity-50"
+              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-medium py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 transition disabled:opacity-50 text-sm"
             >
-              <Play size={16} /> {loading ? 'Running...' : 'Run Simulation'}
+              <Play size={15} /> {loading ? 'Simulating...' : 'Run'}
             </button>
           </div>
         </form>
@@ -414,104 +689,31 @@ export default function App() {
 
       {results && (
         <>
-          {/* Active Open Position Alert */}
-          {results.active_position && (
-            <div className="bg-emerald-950/40 border border-emerald-500/50 rounded-xl p-4 mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-emerald-500/20 rounded-lg text-emerald-400">
-                  <AlertCircle size={20} />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                    Active Position: {results.active_position.symbol}
-                    <span className="text-[11px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded font-mono">
-                      LONG
-                    </span>
-                  </h3>
-                  <p className="text-xs text-slate-400">
-                    Entered on {results.active_position.entry_time} at ${results.active_position.entry_price.toFixed(2)} | Current: ${results.active_position.current_price.toFixed(2)}
-                  </p>
-                </div>
-              </div>
+          {results.active_position && <ActivePositionBanner position={results.active_position} />}
 
-              <div className="flex items-center gap-6 font-mono text-xs">
-                <div>
-                  <span className="text-slate-500 block font-sans">Units</span>
-                  <span className="text-white font-bold">{results.active_position.quantity}</span>
-                </div>
-                <div>
-                  <span className="text-slate-500 block font-sans">Unrealized P&L</span>
-                  <span className={`font-bold ${results.active_position.unrealized_pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                    ${results.active_position.unrealized_pnl.toFixed(2)} ({results.active_position.unrealized_pnl_pct >= 0 ? '+' : ''}{results.active_position.unrealized_pnl_pct.toFixed(2)}%)
-                  </span>
-                </div>
-              </div>
-            </div>
-          )}
+          <KPIGrid results={results} />
 
-          {/* Strategy KPIs */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
-            <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl">
-              <div className="flex items-center gap-2 text-slate-400 text-xs font-semibold mb-1">
-                <DollarSign size={16} className="text-emerald-400" /> Final Equity
-              </div>
-              <div className="text-xl font-bold text-white">
-                ${results.final_equity.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </div>
-              <div className={`text-xs mt-1 font-semibold ${results.total_return_pct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                {results.total_return_pct >= 0 ? '+' : ''}{results.total_return_pct.toFixed(2)}% Total Return
-              </div>
-            </div>
-
-            <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl">
-              <div className="flex items-center gap-2 text-slate-400 text-xs font-semibold mb-1">
-                <TrendingUp size={16} className="text-blue-400" /> CAGR
-              </div>
-              <div className="text-xl font-bold text-white">{results.cagr.toFixed(2)}%</div>
-              <div className="text-xs text-slate-500 mt-1">Annualized Return</div>
-            </div>
-
-            <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl">
-              <div className="flex items-center gap-2 text-slate-400 text-xs font-semibold mb-1">
-                <Activity size={16} className="text-purple-400" /> Sharpe Ratio
-              </div>
-              <div className="text-xl font-bold text-white">{results.sharpe_ratio.toFixed(2)}</div>
-              <div className="text-xs text-slate-500 mt-1">Sortino: {results.sortino_ratio.toFixed(2)}</div>
-            </div>
-
-            <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl">
-              <div className="flex items-center gap-2 text-slate-400 text-xs font-semibold mb-1">
-                <ShieldAlert size={16} className="text-rose-400" /> Max Drawdown
-              </div>
-              <div className="text-xl font-bold text-rose-400">{results.max_drawdown_pct.toFixed(2)}%</div>
-              <div className="text-xs text-slate-500 mt-1">Peak-to-Trough Loss</div>
-            </div>
-
-            <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl">
-              <div className="flex items-center gap-2 text-slate-400 text-xs font-semibold mb-1">
-                <BarChart3 size={16} className="text-amber-400" /> Closed Trades
-              </div>
-              <div className="text-xl font-bold text-white">{results.total_trades}</div>
-              <div className="text-xs text-slate-500 mt-1">
-                {results.active_position ? '1 Active Position' : 'No Active Positions'}
-              </div>
-            </div>
-          </div>
-
-          {/* Synchronized Hover Wrapper */}
           <div onMouseLeave={handleMouseLeaveContainer}>
-            {/* 1. Candlestick Price Chart */}
+            {/* Candlestick Chart */}
             <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl mb-8">
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
                 <h2 className="text-base font-semibold text-white flex items-center gap-2">
                   <CandlestickIcon size={18} className="text-emerald-400" /> Price Action Candlesticks & Executions ({results.symbol})
                 </h2>
-                <div className="flex items-center gap-4 text-xs font-semibold">
+                
+                {/* Visual Marker Legend */}
+                <div className="flex flex-wrap items-center gap-4 text-xs font-semibold">
                   <span className="flex items-center gap-1.5 text-emerald-400">
-                    <ArrowUpRight size={14} /> Buy Entry
+                    <span className="inline-block w-0 h-0 border-x-[5px] border-x-transparent border-b-[9px] border-b-emerald-400"></span> Buy Entry
+                  </span>
+                  <span className="flex items-center gap-1.5 text-emerald-300">
+                    <span className="inline-block w-2.5 h-2.5 bg-emerald-400 rotate-45"></span> Take Profit
                   </span>
                   <span className="flex items-center gap-1.5 text-rose-400">
-                    <ArrowDownRight size={14} /> Sell Exit
+                    <span className="inline-block w-0 h-0 border-x-[5px] border-x-transparent border-t-[9px] border-t-rose-500"></span> Stop Loss
+                  </span>
+                  <span className="flex items-center gap-1.5 text-indigo-400">
+                    <span className="inline-block w-2.5 h-2.5 bg-indigo-400 rounded-sm"></span> Signal Exit
                   </span>
                 </div>
               </div>
@@ -553,16 +755,48 @@ export default function App() {
                       isAnimationActive={false}
                     />
 
+                    {/* Active Position Stop Loss Line */}
+                    {results.active_position?.stop_loss && (
+                      <ReferenceLine
+                        yAxisId="price"
+                        y={results.active_position.stop_loss}
+                        stroke="#f43f5e"
+                        strokeDasharray="4 4"
+                        strokeWidth={1.5}
+                        label={{
+                          value: `SL: $${results.active_position.stop_loss.toFixed(2)}`,
+                          fill: '#f43f5e',
+                          position: 'right',
+                          fontSize: 10,
+                        }}
+                      />
+                    )}
+
+                    {/* Active Position Take Profit Line */}
+                    {results.active_position?.take_profit && (
+                      <ReferenceLine
+                        yAxisId="price"
+                        y={results.active_position.take_profit}
+                        stroke="#10b981"
+                        strokeDasharray="4 4"
+                        strokeWidth={1.5}
+                        label={{
+                          value: `TP: $${results.active_position.take_profit.toFixed(2)}`,
+                          fill: '#10b981',
+                          position: 'right',
+                          fontSize: 10,
+                        }}
+                      />
+                    )}
+
+                    {/* Distinct Execution Shapes */}
                     {results.execution_markers.map((marker, idx) => (
                       <ReferenceDot
-                        key={`${marker.time}-${idx}`}
+                        key={`${marker.time}-${idx}-${marker.side}`}
                         yAxisId="price"
                         x={marker.time}
                         y={marker.price}
-                        r={5}
-                        fill={marker.side === 'BUY' ? '#10b981' : '#f43f5e'}
-                        stroke="#ffffff"
-                        strokeWidth={1.5}
+                        shape={(props) => <ExecutionMarkerShape {...props} marker={marker} />}
                         isFront
                       />
                     ))}
@@ -571,13 +805,13 @@ export default function App() {
               </div>
             </div>
 
-            {/* 2. Portfolio Equity Growth Chart */}
+            {/* Equity Curve */}
             <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl mb-8">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-base font-semibold text-white flex items-center gap-2">
                   <TrendingUp size={18} className="text-emerald-400" /> Portfolio Equity Growth
                 </h2>
-                <span className="text-xs text-slate-400">Synchronized crosshair inspection active</span>
+                <span className="text-xs text-slate-400">Synchronized point-in-time accounting</span>
               </div>
 
               <div className="h-64 w-full">
@@ -614,7 +848,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* 3. Synchronized State Inspector */}
+          {/* Synchronized Inspector */}
           <div className="bg-slate-900 border border-indigo-900/50 rounded-xl p-6 mb-8 shadow-md">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-4">
               <div className="flex items-center gap-2">
@@ -674,63 +908,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* 4. Closed Trades Audit Table */}
-          <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-            <div className="p-4 border-b border-slate-800 flex justify-between items-center">
-              <h2 className="text-base font-semibold text-white">Closed Trades Audit Log</h2>
-              <span className="text-xs text-slate-400">Total Closed: {results.trades.length} positions</span>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-slate-800/50 text-slate-400 text-xs uppercase font-semibold">
-                  <tr>
-                    <th className="p-3">ID</th>
-                    <th className="p-3">Symbol</th>
-                    <th className="p-3">Side</th>
-                    <th className="p-3">Entry Date</th>
-                    <th className="p-3">Exit Date</th>
-                    <th className="p-3">Entry ($)</th>
-                    <th className="p-3">Exit ($)</th>
-                    <th className="p-3">Units</th>
-                    <th className="p-3">P&L ($)</th>
-                    <th className="p-3">Return (%)</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800 font-mono text-xs">
-                  {results.trades.length === 0 ? (
-                    <tr>
-                      <td colSpan={10} className="p-4 text-center text-slate-500 font-sans">
-                        No closed trades completed in this date range.
-                      </td>
-                    </tr>
-                  ) : (
-                    results.trades.map((t) => (
-                      <tr key={t.trade_id} className="hover:bg-slate-800/30">
-                        <td className="p-3 text-slate-400">{t.trade_id}</td>
-                        <td className="p-3 font-semibold text-white font-sans">{t.symbol}</td>
-                        <td className="p-3">
-                          <span className="bg-emerald-500/20 text-emerald-300 font-semibold px-2 py-0.5 rounded text-[11px]">
-                            {t.side}
-                          </span>
-                        </td>
-                        <td className="p-3 text-slate-300">{t.entry_time}</td>
-                        <td className="p-3 text-slate-300">{t.exit_time}</td>
-                        <td className="p-3 text-slate-300">${t.entry_price.toFixed(2)}</td>
-                        <td className="p-3 text-slate-300">${t.exit_price.toFixed(2)}</td>
-                        <td className="p-3 text-slate-300">{t.quantity}</td>
-                        <td className={`p-3 font-semibold ${t.pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                          ${t.pnl.toFixed(2)}
-                        </td>
-                        <td className={`p-3 font-semibold ${t.pnl_pct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                          {t.pnl_pct >= 0 ? '+' : ''}{t.pnl_pct.toFixed(2)}%
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <TradeAuditTable trades={results.trades} />
         </>
       )}
     </div>
