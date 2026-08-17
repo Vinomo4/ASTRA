@@ -4,9 +4,13 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 
 from src.api.schemas.backtest_schemas import (
+    ActivePosition,
     BacktestRequest,
     BacktestResponse,
     EquityPoint,
+    ExecutionMarker,
+    OHLCPoint,
+    PortfolioSnapshot,
     TradeItem,
 )
 from src.backtester.event_engine import BacktestEngine
@@ -21,7 +25,7 @@ router = APIRouter(prefix="/api/backtest", tags=["Backtest"])
 async def run_backtest(req: BacktestRequest) -> BacktestResponse:
     storage = StorageManager()
 
-    # 1. Load from DuckDB or fetch from YFinance on cache miss
+    # 1. Fetch / Load Market Data
     df = storage.load_ohlcv(req.symbol, req.start_date, req.end_date)
     if df.empty:
         loader = YFinanceLoader()
@@ -39,7 +43,7 @@ async def run_backtest(req: BacktestRequest) -> BacktestResponse:
             detail=f"No market data found for symbol {req.symbol} in the requested range.",
         )
 
-    # 2. Execute Strategy and Engine Simulation
+    # 2. Run Backtest
     strategy = TrendFollowingStrategy(fast_ema=req.fast_ema, slow_ema=req.slow_ema)
     engine = BacktestEngine(
         strategy=strategy,
@@ -49,7 +53,21 @@ async def run_backtest(req: BacktestRequest) -> BacktestResponse:
 
     results = engine.run(df)
 
-    # 3. Transform equity curve into chronological point list
+    # 3. Format Response Components
+    ohlc_history = [
+        OHLCPoint(
+            time=row["timestamp"].strftime("%Y-%m-%d")
+            if hasattr(row["timestamp"], "strftime")
+            else str(row["timestamp"]),
+            open=round(float(row["open"]), 2),
+            high=round(float(row["high"]), 2),
+            low=round(float(row["low"]), 2),
+            close=round(float(row["close"]), 2),
+            volume=round(float(row["volume"]), 2),
+        )
+        for _, row in df.sort_values("timestamp").iterrows()
+    ]
+
     equity_points = [
         EquityPoint(
             time=ts.strftime("%Y-%m-%d") if hasattr(ts, "strftime") else str(ts),
@@ -58,7 +76,14 @@ async def run_backtest(req: BacktestRequest) -> BacktestResponse:
         for ts, val in results["equity_curve"].items()
     ]
 
-    # 4. Transform trade records into response items
+    snapshots = [PortfolioSnapshot(**snap) for snap in results["snapshots"]]
+
+    execution_markers = [ExecutionMarker(**marker) for marker in results["execution_markers"]]
+
+    active_pos = (
+        ActivePosition(**results["active_position"]) if results["active_position"] else None
+    )
+
     trade_items = [
         TradeItem(
             trade_id=t.trade_id,
@@ -89,6 +114,10 @@ async def run_backtest(req: BacktestRequest) -> BacktestResponse:
         sortino_ratio=float(results["sortino_ratio"]),
         max_drawdown_pct=float(results["max_drawdown_pct"]),
         total_trades=int(results["total_trades"]),
+        active_position=active_pos,
+        execution_markers=execution_markers,
         equity_curve=equity_points,
+        ohlc_history=ohlc_history,
+        snapshots=snapshots,
         trades=trade_items,
     )

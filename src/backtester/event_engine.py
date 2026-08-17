@@ -1,3 +1,4 @@
+# src/backtester/event_engine.py
 from __future__ import annotations
 
 from collections import deque
@@ -45,11 +46,15 @@ class BacktestEngine:
         self.sizer = VolatilityPositionSizer(risk_fraction=risk_fraction)
         self.positions: dict[str, Position] = {}
         self.trades: list[TradeRecord] = []
+        self.executions: list[dict[str, object]] = []
         self.equity_history: list[dict[str, object]] = []
+        self.snapshots: list[dict[str, object]] = []
 
     def run(self, df: pd.DataFrame) -> dict[str, object]:
         data = df.copy().sort_values("timestamp").reset_index(drop=True)
         data["atr"] = TechnicalFeatures.calculate_atr(data, period=14).bfill()
+
+        peak_equity = self.initial_capital
 
         for _, row in data.iterrows():
             current_time = row["timestamp"]
@@ -61,7 +66,35 @@ class BacktestEngine:
             current_position.update_market_price(current_price)
 
             total_equity = self.capital + (current_position.quantity * current_price)
+            if total_equity > peak_equity:
+                peak_equity = total_equity
+
+            drawdown_pct = ((total_equity - peak_equity) / peak_equity) * 100.0
+
+            unrealized_pnl = 0.0
+            if current_position.quantity > 0:
+                unrealized_pnl = (
+                    current_price - current_position.average_entry_price
+                ) * current_position.quantity
+
+            time_str = (
+                current_time.strftime("%Y-%m-%d")
+                if hasattr(current_time, "strftime")
+                else str(current_time)
+            )
+
             self.equity_history.append({"timestamp": current_time, "equity": total_equity})
+            self.snapshots.append(
+                {
+                    "time": time_str,
+                    "equity": round(total_equity, 2),
+                    "cash": round(self.capital, 2),
+                    "position_quantity": round(current_position.quantity, 4),
+                    "position_avg_price": round(current_position.average_entry_price, 2),
+                    "unrealized_pnl": round(unrealized_pnl, 2),
+                    "drawdown_pct": round(drawdown_pct, 2),
+                }
+            )
 
             bar_event = MarketDataEvent(
                 timestamp=current_time,
@@ -84,8 +117,17 @@ class BacktestEngine:
                         self.capital -= cost
                         current_position.quantity = fill.quantity
                         current_position.average_entry_price = fill.fill_price
-                        current_position.entry_time = fill.timestamp  # 1. Capture entry timestamp
+                        current_position.entry_time = fill.timestamp
                         self.positions[symbol] = current_position
+
+                        self.executions.append(
+                            {
+                                "time": time_str,
+                                "price": round(fill.fill_price, 2),
+                                "side": OrderSide.BUY,
+                                "quantity": round(fill.quantity, 4),
+                            }
+                        )
 
             # --- EXIT / SELL EXECUTION ---
             elif signal and signal.signal_type == SignalType.EXIT and current_position.quantity > 0:
@@ -110,8 +152,7 @@ class BacktestEngine:
                         trade_id=f"T_{len(self.trades) + 1}",
                         symbol=symbol,
                         side=OrderSide.BUY,
-                        entry_time=current_position.entry_time
-                        or current_time,  # 2. Use recorded entry timestamp
+                        entry_time=current_position.entry_time or current_time,
                         exit_time=current_time,
                         entry_price=current_position.average_entry_price,
                         exit_price=fill.fill_price,
@@ -122,11 +163,43 @@ class BacktestEngine:
                         slippage_cost=fill.slippage,
                     )
                 )
-                # 3. Cleanly reset position state
+
+                self.executions.append(
+                    {
+                        "time": time_str,
+                        "price": round(fill.fill_price, 2),
+                        "side": OrderSide.SELL,
+                        "quantity": round(fill.quantity, 4),
+                    }
+                )
+
                 current_position.quantity = 0.0
                 current_position.average_entry_price = 0.0
                 current_position.entry_time = None
                 self.positions[symbol] = current_position
+
+        # --- EVALUATE ACTIVE OPEN POSITION STATE ---
+        active_pos_data = None
+        if not data.empty:
+            last_price = float(data.iloc[-1]["close"])
+            for sym, pos in self.positions.items():
+                if pos.quantity > 0:
+                    entry_time_str = (
+                        pos.entry_time.strftime("%Y-%m-%d")
+                        if hasattr(pos.entry_time, "strftime")
+                        else str(pos.entry_time)
+                    )
+                    unrealized_pnl = (last_price - pos.average_entry_price) * pos.quantity
+                    unrealized_pnl_pct = (last_price / pos.average_entry_price - 1.0) * 100.0
+                    active_pos_data = {
+                        "symbol": sym,
+                        "entry_time": entry_time_str,
+                        "entry_price": round(pos.average_entry_price, 2),
+                        "current_price": round(last_price, 2),
+                        "quantity": round(pos.quantity, 4),
+                        "unrealized_pnl": round(unrealized_pnl, 2),
+                        "unrealized_pnl_pct": round(unrealized_pnl_pct, 2),
+                    }
 
         equity_df = pd.DataFrame(self.equity_history).set_index("timestamp")["equity"]
         max_dd, _ = PerformanceAnalytics.calculate_max_drawdown(equity_df)
@@ -140,7 +213,10 @@ class BacktestEngine:
             "sortino_ratio": PerformanceAnalytics.calculate_sortino_ratio(equity_df),
             "max_drawdown_pct": max_dd * 100,
             "total_trades": len(self.trades),
+            "active_position": active_pos_data,
+            "execution_markers": self.executions,
             "equity_curve": equity_df.to_dict(),
+            "snapshots": self.snapshots,
         }
 
 
