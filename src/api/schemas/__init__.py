@@ -1,15 +1,14 @@
-from .backtest import BacktestRequest, BacktestSummary
-from .backtest_schemas import BacktestRequest as BacktestRunRequest
-from .backtest_schemas import BacktestResponse
-from .market import MarketDataQuery
-from .ml import TrainingMetrics, TrainRequest
+# src/api/schemas/__init__.py
+from src.api.schemas.backtest_schemas import (
+    BacktestRequest,
+    BacktestResponse,
+    EquityPoint,
+    TradeItem,
+)
 
 __all__ = [
     "BacktestRequest",
     "BacktestResponse",
-    "BacktestRunRequest",
-    "BacktestSummary",
-    "MarketDataQuery",
-    "TrainRequest",
-    "TrainingMetrics",
+    "EquityPoint",
+    "TradeItem",
 ]
