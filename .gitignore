@@ -1,0 +1,36 @@
+# Virtual environments
+.venv/
+env/
+venv/
+
+# Build & packaging artifacts
+*.egg-info/
+*.egg
+build/
+dist/
+*.whl
+node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Local databases, data files & ML tracking
+data/raw/*
+data/processed/*
+*.duckdb
+*.parquet
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+mlruns/
+.mlflow/
+
+# Environment variables & secrets
+.env
+.env.*

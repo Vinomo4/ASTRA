@@ -1,0 +1,5 @@
+capital: 100000
+commission_rate: 0.0005
+fixed_slippage: 0.0002
+risk_per_trade: 0.01
+atr_multiplier: 2.0

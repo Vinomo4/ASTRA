@@ -1,0 +1,8 @@
+trend_following:
+  fast_window: 20
+  slow_window: 50
+mean_reversion:
+  lookback: 20
+  zscore_threshold: 2.0
+ml_strategy:
+  threshold: 0.6
