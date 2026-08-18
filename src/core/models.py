@@ -57,13 +57,17 @@ class TradeRecord(BaseModel):
     side: OrderSide
     entry_time: datetime
     exit_time: datetime
-    entry_price: float
-    exit_price: float
+    entry_price: float  # Precio nominal de mercado en entrada
+    effective_entry_price: float = 0.0  # Precio real de ejecución con slippage
+    exit_price: float  # Precio nominal de mercado en salida
+    effective_exit_price: float = 0.0  # Precio real de ejecución con slippage
     quantity: float
-    pnl: float
-    pnl_pct: float
-    commission_paid: float
-    slippage_cost: float
+    gross_pnl: float = 0.0  # PnL antes de comisiones y slippage
+    commission_paid: float = 0.0  # Comisiones acumuladas (entrada + salida)
+    fees_paid: float = 0.0  # Alias compatible con el frontend
+    slippage_cost: float = 0.0  # Coste monetario del deslizamiento
+    pnl: float  # PnL neta final
+    pnl_pct: float  # Retorno porcentual neto
     exit_reason: str = "SIGNAL"
 
 

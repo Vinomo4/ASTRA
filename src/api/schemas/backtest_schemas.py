@@ -1,31 +1,44 @@
 # src/api/schemas/backtest_schemas.py
 from __future__ import annotations
-
+from typing import Any, List, Optional
 from pydantic import BaseModel, Field
-from src.core.constants import OrderSide
 
 
 class BacktestRequest(BaseModel):
-    symbol: str = Field(default="AAPL", examples=["AAPL", "BTC-USD", "ETH-USD"])
-    start_date: str = Field(default="2023-01-01", examples=["2023-01-01"])
-    end_date: str = Field(default="2025-01-01", examples=["2025-01-01"])
-    initial_capital: float = Field(default=100_000.0, ge=1_000.0)
-    fast_ema: int = Field(default=20, ge=2, le=100)
-    slow_ema: int = Field(default=50, ge=5, le=300)
-    risk_fraction: float = Field(default=0.01, ge=0.001, le=0.1)
+    symbol: str
+    start_date: str
+    end_date: str
+    initial_capital: float = Field(default=100000.0, gt=0)
+    fast_ema: int = Field(default=20, gt=0)
+    slow_ema: int = Field(default=50, gt=0)
+    risk_fraction: float = Field(default=0.01, gt=0, le=1.0)
     atr_multiplier_sl: float = Field(default=2.0, gt=0.0)
     atr_multiplier_tp: float = Field(default=4.0, gt=0.0)
 
+    # Market Friction Parameters
+    commission_bps: float = Field(default=5.0, ge=0.0)
+    commission_fixed: float = Field(default=0.0, ge=0.0)
+    slippage_bps: float = Field(default=2.0, ge=0.0)
+    gap_slippage_enabled: bool = Field(default=True)
 
-class EquityPoint(BaseModel):
-    time: str
-    value: float
 
-
-class BenchmarkPoint(BaseModel):
-    time: str
-    equity: float
-    return_pct: float
+class TradeItem(BaseModel):
+    trade_id: str
+    symbol: str
+    side: str
+    entry_time: str
+    exit_time: str
+    entry_price: float
+    effective_entry_price: float
+    exit_price: float
+    effective_exit_price: float
+    quantity: float
+    gross_pnl: float
+    fees_paid: float
+    slippage_cost: float
+    pnl: float
+    pnl_pct: float
+    exit_reason: str
 
 
 class OHLCPoint(BaseModel):
@@ -47,12 +60,24 @@ class PortfolioSnapshot(BaseModel):
     drawdown_pct: float
 
 
+class BenchmarkPoint(BaseModel):
+    time: str
+    equity: float
+    return_pct: float
+
+
+class EquityPoint(BaseModel):
+    time: str
+    value: float
+
+
 class ExecutionMarker(BaseModel):
     time: str
     price: float
-    side: OrderSide
+    nominal_price: Optional[float] = None
+    side: str
     quantity: float
-    reason: str = "SIGNAL"
+    reason: Optional[str] = None
 
 
 class ActivePosition(BaseModel):
@@ -63,22 +88,8 @@ class ActivePosition(BaseModel):
     quantity: float
     unrealized_pnl: float
     unrealized_pnl_pct: float
-    stop_loss: float | None = None
-    take_profit: float | None = None
-
-
-class TradeItem(BaseModel):
-    trade_id: str
-    symbol: str
-    side: OrderSide
-    entry_time: str
-    exit_time: str
-    entry_price: float
-    exit_price: float
-    quantity: float
-    pnl: float
-    pnl_pct: float
-    exit_reason: str = "SIGNAL"
+    stop_loss: Optional[float] = None
+    take_profit: Optional[float] = None
 
 
 class TradeAnalytics(BaseModel):
@@ -111,12 +122,14 @@ class BacktestResponse(BaseModel):
     sortino_ratio: float
     max_drawdown_pct: float
     total_trades: int
+    total_fees_paid: Optional[float] = 0.0
+    total_slippage_paid: Optional[float] = 0.0
     trade_analytics: TradeAnalytics
     benchmark_analytics: BenchmarkAnalytics
-    active_position: ActivePosition | None = None
-    execution_markers: list[ExecutionMarker]
-    equity_curve: list[EquityPoint]
-    benchmark_curve: list[BenchmarkPoint]
-    ohlc_history: list[OHLCPoint]
-    snapshots: list[PortfolioSnapshot]
-    trades: list[TradeItem]
+    active_position: Optional[ActivePosition] = None
+    execution_markers: List[ExecutionMarker]
+    equity_curve: List[EquityPoint]
+    benchmark_curve: List[BenchmarkPoint]
+    ohlc_history: List[OHLCPoint]
+    snapshots: List[PortfolioSnapshot]
+    trades: List[TradeItem]

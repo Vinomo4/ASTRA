@@ -30,16 +30,22 @@ import { FastTooltipBridge } from './components/charts/FastTooltipBridge';
 
 export default function App() {
   const [params, setParams] = useState<BacktestParams>({
-    symbol: 'BTC-USD',
-    start_date: '2023-01-01',
-    end_date: '2024-01-01',
-    initial_capital: 100000,
-    fast_ema: 20,
-    slow_ema: 50,
-    risk_fraction: 0.01,
-    atr_multiplier_sl: 2.0,
-    atr_multiplier_tp: 4.0,
-  });
+  symbol: 'BTC-USD',
+  start_date: '2023-01-01',
+  end_date: '2024-01-01',
+  initial_capital: 100000,
+  fast_ema: 20,
+  slow_ema: 50,
+  risk_fraction: 0.01,
+  atr_multiplier_sl: 2.0,
+  atr_multiplier_tp: 4.0,
+  
+  // Default Market Frictions
+  commission_bps: 5.0,        // 0.05%
+  commission_fixed: 0.0,      // $0.00
+  slippage_bps: 2.0,          // 0.02%
+  gap_slippage_enabled: true,
+});
 
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<BacktestResult | null>(null);
@@ -182,7 +188,7 @@ export default function App() {
         <>
           {results.active_position && <ActivePositionBanner position={results.active_position} />}
           <KPIGrid results={results} />
-          <TradeAnalyticsPanel analytics={results.trade_analytics} />
+          <TradeAnalyticsPanel analytics={results.trade_analytics} trades={results.trades} />
 
           <div onMouseLeave={handleMouseLeaveContainer}>
             {/* Price Candlestick Chart */}

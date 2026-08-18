@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from collections import deque
 from datetime import datetime
+from typing import Any
 
 import pandas as pd
 
@@ -35,27 +36,44 @@ class BacktestEngine:
         self,
         strategy: BaseStrategy,
         initial_capital: float = 100_000.0,
-        commission_rate: float = 0.0005,
-        slippage_rate: float = 0.0002,
         risk_fraction: float = 0.01,
         atr_multiplier_sl: float = 2.0,
         atr_multiplier_tp: float = 4.0,
+        # Parámetros de Fricción Configurables
+        commission_bps: float = 5.0,
+        commission_fixed: float = 0.0,
+        slippage_bps: float = 2.0,
+        gap_slippage_enabled: bool = True,
     ) -> None:
         self.strategy = strategy
         self.initial_capital = initial_capital
         self.capital = initial_capital
-        self.broker = SimulatedBroker(commission_rate=commission_rate)
+        self.gap_slippage_enabled = gap_slippage_enabled
+
+        # Broker simulador con parámetros de coste
+        self.broker = SimulatedBroker(
+            commission_bps=commission_bps,
+            commission_fixed=commission_fixed,
+            slippage_bps=slippage_bps,
+        )
+
         self.sizer = VolatilityPositionSizer(
             risk_fraction=risk_fraction,
             atr_multiplier_sl=atr_multiplier_sl,
             atr_multiplier_tp=atr_multiplier_tp,
         )
+
         self.positions: dict[str, Position] = {}
         self.trades: list[TradeRecord] = []
-        self.executions: list[dict[str, object]] = []
-        self.equity_history: list[dict[str, object]] = []
-        self.snapshots: list[dict[str, object]] = []
+        self.executions: list[dict[str, Any]] = []
+        self.equity_history: list[dict[str, Any]] = []
+        self.snapshots: list[dict[str, Any]] = []
         self.pending_order: OrderEvent | None = None
+
+        # Seguimiento de fricciones acumuladas
+        self.entry_fees: dict[str, float] = {}
+        self.entry_slippages: dict[str, float] = {}
+        self.entry_nominal_prices: dict[str, float] = {}
 
     def _close_position(
         self,
@@ -71,12 +89,23 @@ class BacktestEngine:
             side=OrderSide.SELL,
             quantity=position.quantity,
         )
+
+        # Ejecución a través del broker (aplica slippage de salida y comisión)
         fill = self.broker.execute_order(order, exit_price)
         revenue = (fill.fill_price * fill.quantity) - fill.commission
         self.capital += revenue
 
-        pnl = (fill.fill_price - position.average_entry_price) * fill.quantity - fill.commission
-        pnl_pct = (fill.fill_price / position.average_entry_price) - 1.0
+        # Costes y precios nominales de entrada
+        entry_nominal = self.entry_nominal_prices.get(position.symbol, position.average_entry_price)
+        entry_fee = self.entry_fees.get(position.symbol, 0.0)
+        entry_slip = self.entry_slippages.get(position.symbol, 0.0)
+
+        # Desglose de Contabilidad Friccional
+        total_fees = entry_fee + fill.commission
+        total_slippage = entry_slip + fill.slippage
+        gross_pnl = (fill.nominal_price - entry_nominal) * fill.quantity
+        net_pnl = (fill.fill_price - position.average_entry_price) * fill.quantity - total_fees
+        net_pnl_pct = (net_pnl / (position.average_entry_price * fill.quantity)) * 100.0
 
         time_str = (
             timestamp.strftime("%Y-%m-%d") if hasattr(timestamp, "strftime") else str(timestamp)
@@ -89,13 +118,16 @@ class BacktestEngine:
                 side=OrderSide.BUY,
                 entry_time=position.entry_time or timestamp,
                 exit_time=timestamp,
-                entry_price=position.average_entry_price,
-                exit_price=fill.fill_price,
+                entry_price=round(entry_nominal, 2),
+                effective_entry_price=round(position.average_entry_price, 2),
+                exit_price=round(fill.nominal_price, 2),
+                effective_exit_price=round(fill.fill_price, 2),
                 quantity=fill.quantity,
-                pnl=pnl,
-                pnl_pct=pnl_pct,
-                commission_paid=fill.commission,
-                slippage_cost=fill.slippage,
+                gross_pnl=round(gross_pnl, 2),
+                fees_paid=round(total_fees, 2),
+                slippage_cost=round(total_slippage, 2),
+                pnl=round(net_pnl, 2),
+                pnl_pct=round(net_pnl_pct, 2),
                 exit_reason=reason,
             )
         )
@@ -104,19 +136,24 @@ class BacktestEngine:
             {
                 "time": time_str,
                 "price": round(fill.fill_price, 2),
+                "nominal_price": round(fill.nominal_price, 2),
                 "side": OrderSide.SELL,
                 "quantity": round(fill.quantity, 4),
                 "reason": reason,
             }
         )
 
+        # Limpiar estado de la posición
         position.quantity = 0.0
         position.average_entry_price = 0.0
         position.entry_time = None
         position.stop_loss = None
         position.take_profit = None
+        self.entry_fees.pop(position.symbol, None)
+        self.entry_slippages.pop(position.symbol, None)
+        self.entry_nominal_prices.pop(position.symbol, None)
 
-    def run(self, df: pd.DataFrame) -> dict[str, object]:
+    def run(self, df: pd.DataFrame) -> dict[str, Any]:
         data = df.copy().sort_values("timestamp").reset_index(drop=True)
         data["atr"] = TechnicalFeatures.calculate_atr(data, period=14).bfill()
 
@@ -135,20 +172,28 @@ class BacktestEngine:
             current_position = self.positions.get(symbol, Position(symbol=symbol))
 
             # -------------------------------------------------------------
-            # 1. PROCESS PENDING ORDERS AT BAR t OPEN (Next-Bar Execution)
+            # 1. EJECUCIÓN DE ÓRDENES PENDIENTES AL OPEN (Next-Bar Execution)
             # -------------------------------------------------------------
             if self.pending_order and self.pending_order.symbol == symbol:
                 if self.pending_order.side == OrderSide.BUY and current_position.quantity == 0:
                     fill = self.broker.execute_order(self.pending_order, open_price)
                     cost = (fill.fill_price * fill.quantity) + fill.commission
-                    if self.capital >= cost:
+
+                    if self.capital >= cost and fill.quantity > 0:
                         self.capital -= cost
                         current_position.quantity = fill.quantity
-                        current_position.average_entry_price = fill.fill_price
+                        current_position.average_entry_price = (
+                            fill.fill_price
+                        )  # Precio efectivo (con slippage)
                         current_position.entry_time = current_time
                         current_position.stop_loss = self.pending_order.stop_loss
                         current_position.take_profit = self.pending_order.take_profit
                         self.positions[symbol] = current_position
+
+                        # Guardar metadatos de coste de entrada
+                        self.entry_nominal_prices[symbol] = open_price
+                        self.entry_fees[symbol] = fill.commission
+                        self.entry_slippages[symbol] = fill.slippage
 
                         time_str = (
                             current_time.strftime("%Y-%m-%d")
@@ -159,6 +204,7 @@ class BacktestEngine:
                             {
                                 "time": time_str,
                                 "price": round(fill.fill_price, 2),
+                                "nominal_price": round(fill.nominal_price, 2),
                                 "side": OrderSide.BUY,
                                 "quantity": round(fill.quantity, 4),
                                 "reason": "SIGNAL_ENTRY",
@@ -171,27 +217,35 @@ class BacktestEngine:
                 self.pending_order = None
 
             # -------------------------------------------------------------
-            # 2. CHECK INTRA-BAR BRACKET EXITS (SL / TP)
+            # 2. SALIDAS INTRA-BARRA (Stop Loss / Take Profit Brackets)
             # -------------------------------------------------------------
             if current_position.quantity > 0:
-                # Stop Loss Triggered
+                # Chequeo de Stop Loss (con soporte opcional de Gap)
                 if (
                     current_position.stop_loss is not None
                     and low_price <= current_position.stop_loss
                 ):
-                    exit_price = min(open_price, current_position.stop_loss)
+                    if self.gap_slippage_enabled and open_price < current_position.stop_loss:
+                        exit_price = open_price  # Salida penalizada por apertura en gap
+                    else:
+                        exit_price = current_position.stop_loss
+
                     self._close_position(current_position, exit_price, current_time, "STOP_LOSS")
 
-                # Take Profit Triggered
+                # Chequeo de Take Profit
                 elif (
                     current_position.take_profit is not None
                     and high_price >= current_position.take_profit
                 ):
-                    exit_price = max(open_price, current_position.take_profit)
+                    exit_price = (
+                        open_price
+                        if open_price > current_position.take_profit
+                        else current_position.take_profit
+                    )
                     self._close_position(current_position, exit_price, current_time, "TAKE_PROFIT")
 
             # -------------------------------------------------------------
-            # 3. MARK-TO-MARKET PORTFOLIO SNAPSHOT (at Bar t Close)
+            # 3. VALORACIÓN MARK-TO-MARKET (Al cierre de barra)
             # -------------------------------------------------------------
             current_position.update_market_price(close_price)
             total_equity = self.capital + (current_position.quantity * close_price)
@@ -225,7 +279,7 @@ class BacktestEngine:
             )
 
             # -------------------------------------------------------------
-            # 4. STRATEGY EVALUATION (Generates Order for Bar t+1)
+            # 4. EVALUACIÓN DE ESTRATEGIA (Genera orden para t+1)
             # -------------------------------------------------------------
             bar_event = MarketDataEvent(
                 timestamp=current_time,
@@ -252,7 +306,7 @@ class BacktestEngine:
                 )
 
         # -------------------------------------------------------------
-        # 5. ACTIVE POSITION & SUMMARY COMPILATION
+        # 5. GENERACIÓN DE ANALÍTICA Y RESULTADOS FINALES
         # -------------------------------------------------------------
         active_pos_data = None
         if not data.empty:
@@ -281,6 +335,10 @@ class BacktestEngine:
         equity_df = pd.DataFrame(self.equity_history).set_index("timestamp")["equity"]
         max_dd, _ = PerformanceAnalytics.calculate_max_drawdown(equity_df)
 
+        # Agregación de fricciones totales
+        total_fees_paid = sum(getattr(t, "fees_paid", 0.0) for t in self.trades)
+        total_slippage_paid = sum(getattr(t, "slippage_cost", 0.0) for t in self.trades)
+
         return {
             "initial_capital": self.initial_capital,
             "final_equity": equity_df.iloc[-1] if not equity_df.empty else self.initial_capital,
@@ -290,6 +348,8 @@ class BacktestEngine:
             "sortino_ratio": PerformanceAnalytics.calculate_sortino_ratio(equity_df),
             "max_drawdown_pct": max_dd * 100,
             "total_trades": len(self.trades),
+            "total_fees_paid": round(total_fees_paid, 2),
+            "total_slippage_paid": round(total_slippage_paid, 2),
             "active_position": active_pos_data,
             "execution_markers": self.executions,
             "equity_curve": equity_df.to_dict(),

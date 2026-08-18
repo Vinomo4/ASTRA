@@ -10,6 +10,12 @@ export interface BacktestParams {
   risk_fraction: number;
   atr_multiplier_sl: number;
   atr_multiplier_tp: number;
+  
+  // Market Friction Parameters
+  commission_bps: number;
+  commission_fixed: number;
+  slippage_bps: number;
+  gap_slippage_enabled: boolean;
 }
 
 export interface OHLCPoint {
@@ -40,6 +46,7 @@ export interface BenchmarkPoint {
 export interface ExecutionMarker {
   time: string;
   price: number;
+  nominal_price?: number;
   side: 'BUY' | 'SELL';
   quantity: number;
   reason?: string;
@@ -64,8 +71,14 @@ export interface TradeItem {
   entry_time: string;
   exit_time: string;
   entry_price: number;
+  effective_entry_price?: number;
   exit_price: number;
+  effective_exit_price?: number;
   quantity: number;
+  gross_pnl?: number;
+  fees_paid?: number;
+  commission_paid?: number;
+  slippage_cost?: number;
   pnl: number;
   pnl_pct: number;
   exit_reason: string;
@@ -101,6 +114,8 @@ export interface BacktestResult {
   sortino_ratio: number;
   max_drawdown_pct: number;
   total_trades: number;
+  total_fees_paid?: number;
+  total_slippage_paid?: number;
   trade_analytics: TradeAnalytics;
   benchmark_analytics: BenchmarkAnalytics;
   active_position: ActivePosition | null;

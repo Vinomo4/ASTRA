@@ -48,7 +48,7 @@ async def run_backtest(req: BacktestRequest) -> BacktestResponse:
             detail=f"No market data found for symbol {req.symbol} in the requested range.",
         )
 
-    # 2. Run Backtest
+    # 2. Run Backtest WITH Friction Parameters Forwarded
     strategy = TrendFollowingStrategy(fast_ema=req.fast_ema, slow_ema=req.slow_ema)
     engine = BacktestEngine(
         strategy=strategy,
@@ -56,6 +56,10 @@ async def run_backtest(req: BacktestRequest) -> BacktestResponse:
         risk_fraction=req.risk_fraction,
         atr_multiplier_sl=req.atr_multiplier_sl,
         atr_multiplier_tp=req.atr_multiplier_tp,
+        commission_bps=req.commission_bps,
+        commission_fixed=req.commission_fixed,
+        slippage_bps=req.slippage_bps,
+        gap_slippage_enabled=req.gap_slippage_enabled,
     )
 
     results = engine.run(df)
@@ -118,11 +122,12 @@ async def run_backtest(req: BacktestRequest) -> BacktestResponse:
         ActivePosition(**results["active_position"]) if results["active_position"] else None
     )
 
+    # 4. Map Trade Audit Records Including All Friction Metrics
     trade_items = [
         TradeItem(
             trade_id=t.trade_id,
             symbol=t.symbol,
-            side=t.side,
+            side=t.side if isinstance(t.side, str) else t.side.value,
             entry_time=t.entry_time.strftime("%Y-%m-%d")
             if hasattr(t.entry_time, "strftime")
             else str(t.entry_time),
@@ -130,10 +135,17 @@ async def run_backtest(req: BacktestRequest) -> BacktestResponse:
             if hasattr(t.exit_time, "strftime")
             else str(t.exit_time),
             entry_price=round(float(t.entry_price), 2),
+            effective_entry_price=round(
+                float(getattr(t, "effective_entry_price", t.entry_price)), 2
+            ),
             exit_price=round(float(t.exit_price), 2),
+            effective_exit_price=round(float(getattr(t, "effective_exit_price", t.exit_price)), 2),
             quantity=round(float(t.quantity), 4),
+            gross_pnl=round(float(getattr(t, "gross_pnl", t.pnl)), 2),
+            fees_paid=round(float(getattr(t, "fees_paid", getattr(t, "commission_paid", 0.0))), 2),
+            slippage_cost=round(float(getattr(t, "slippage_cost", 0.0)), 2),
             pnl=round(float(t.pnl), 2),
-            pnl_pct=round(float(t.pnl_pct * 100), 2),
+            pnl_pct=round(float(t.pnl_pct), 2),
             exit_reason=t.exit_reason,
         )
         for t in engine.trades
@@ -149,6 +161,8 @@ async def run_backtest(req: BacktestRequest) -> BacktestResponse:
         sortino_ratio=float(results["sortino_ratio"]),
         max_drawdown_pct=float(results["max_drawdown_pct"]),
         total_trades=int(results["total_trades"]),
+        total_fees_paid=results.get("total_fees_paid", 0.0),
+        total_slippage_paid=results.get("total_slippage_paid", 0.0),
         trade_analytics=TradeAnalytics(**trade_stats),
         benchmark_analytics=BenchmarkAnalytics(
             benchmark_total_return_pct=round(bench_total_ret, 2),
