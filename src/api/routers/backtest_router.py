@@ -2,15 +2,20 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
+import pandas as pd
 
+from src.analytics.metrics import PerformanceAnalytics
 from src.api.schemas.backtest_schemas import (
     ActivePosition,
     BacktestRequest,
     BacktestResponse,
+    BenchmarkAnalytics,
+    BenchmarkPoint,
     EquityPoint,
     ExecutionMarker,
     OHLCPoint,
     PortfolioSnapshot,
+    TradeAnalytics,
     TradeItem,
 )
 from src.backtester.event_engine import BacktestEngine
@@ -43,7 +48,7 @@ async def run_backtest(req: BacktestRequest) -> BacktestResponse:
             detail=f"No market data found for symbol {req.symbol} in the requested range.",
         )
 
-    # 2. Run Backtest with Next-Bar Execution & ATR Bracket Multipliers
+    # 2. Run Backtest
     strategy = TrendFollowingStrategy(fast_ema=req.fast_ema, slow_ema=req.slow_ema)
     engine = BacktestEngine(
         strategy=strategy,
@@ -55,7 +60,36 @@ async def run_backtest(req: BacktestRequest) -> BacktestResponse:
 
     results = engine.run(df)
 
-    # 3. Format Response Components
+    # 3. Compute Benchmark Curve (Buy & Hold of Base Asset)
+    sorted_df = df.sort_values("timestamp").reset_index(drop=True)
+    initial_close = float(sorted_df.iloc[0]["close"])
+    benchmark_shares = req.initial_capital / initial_close
+
+    benchmark_equity_series = sorted_df.set_index("timestamp")["close"] * benchmark_shares
+    strategy_equity_series = pd.Series(results["equity_curve"])
+
+    alpha, beta = PerformanceAnalytics.calculate_alpha_beta(
+        strategy_equity_series, benchmark_equity_series
+    )
+    bench_cagr = PerformanceAnalytics.calculate_cagr(benchmark_equity_series) * 100
+    bench_total_ret = ((benchmark_equity_series.iloc[-1] / req.initial_capital) - 1.0) * 100
+    calmar = PerformanceAnalytics.calculate_calmar_ratio(
+        results["cagr"], results["max_drawdown_pct"]
+    )
+
+    trade_stats = PerformanceAnalytics.calculate_trade_statistics(engine.trades)
+
+    benchmark_curve = [
+        BenchmarkPoint(
+            time=row["timestamp"].strftime("%Y-%m-%d")
+            if hasattr(row["timestamp"], "strftime")
+            else str(row["timestamp"]),
+            equity=round(float(row["close"] * benchmark_shares), 2),
+            return_pct=round(float((row["close"] / initial_close - 1.0) * 100), 2),
+        )
+        for _, row in sorted_df.iterrows()
+    ]
+
     ohlc_history = [
         OHLCPoint(
             time=row["timestamp"].strftime("%Y-%m-%d")
@@ -67,7 +101,7 @@ async def run_backtest(req: BacktestRequest) -> BacktestResponse:
             close=round(float(row["close"]), 2),
             volume=round(float(row["volume"]), 2),
         )
-        for _, row in df.sort_values("timestamp").iterrows()
+        for _, row in sorted_df.iterrows()
     ]
 
     equity_points = [
@@ -79,9 +113,7 @@ async def run_backtest(req: BacktestRequest) -> BacktestResponse:
     ]
 
     snapshots = [PortfolioSnapshot(**snap) for snap in results["snapshots"]]
-
     execution_markers = [ExecutionMarker(**marker) for marker in results["execution_markers"]]
-
     active_pos = (
         ActivePosition(**results["active_position"]) if results["active_position"] else None
     )
@@ -117,9 +149,18 @@ async def run_backtest(req: BacktestRequest) -> BacktestResponse:
         sortino_ratio=float(results["sortino_ratio"]),
         max_drawdown_pct=float(results["max_drawdown_pct"]),
         total_trades=int(results["total_trades"]),
+        trade_analytics=TradeAnalytics(**trade_stats),
+        benchmark_analytics=BenchmarkAnalytics(
+            benchmark_total_return_pct=round(bench_total_ret, 2),
+            benchmark_cagr=round(bench_cagr, 2),
+            alpha=round(alpha * 100, 2),
+            beta=round(beta, 2),
+            calmar_ratio=round(calmar, 2),
+        ),
         active_position=active_pos,
         execution_markers=execution_markers,
         equity_curve=equity_points,
+        benchmark_curve=benchmark_curve,
         ohlc_history=ohlc_history,
         snapshots=snapshots,
         trades=trade_items,

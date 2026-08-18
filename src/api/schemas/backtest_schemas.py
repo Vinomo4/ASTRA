@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from pydantic import BaseModel, Field
-
 from src.core.constants import OrderSide
 
 
@@ -14,13 +13,19 @@ class BacktestRequest(BaseModel):
     fast_ema: int = Field(default=20, ge=2, le=100)
     slow_ema: int = Field(default=50, ge=5, le=300)
     risk_fraction: float = Field(default=0.01, ge=0.001, le=0.1)
-    atr_multiplier_sl: float = Field(default=2.0, ge=0.5, le=10.0)
-    atr_multiplier_tp: float = Field(default=4.0, ge=1.0, le=20.0)
+    atr_multiplier_sl: float = Field(default=2.0, gt=0.0)
+    atr_multiplier_tp: float = Field(default=4.0, gt=0.0)
 
 
 class EquityPoint(BaseModel):
     time: str
     value: float
+
+
+class BenchmarkPoint(BaseModel):
+    time: str
+    equity: float
+    return_pct: float
 
 
 class OHLCPoint(BaseModel):
@@ -76,6 +81,26 @@ class TradeItem(BaseModel):
     exit_reason: str = "SIGNAL"
 
 
+class TradeAnalytics(BaseModel):
+    win_rate_pct: float
+    profit_factor: float
+    payoff_ratio: float
+    expectancy: float
+    avg_win: float
+    avg_loss: float
+    avg_trade_duration_days: float
+    max_consecutive_wins: int
+    max_consecutive_losses: int
+
+
+class BenchmarkAnalytics(BaseModel):
+    benchmark_total_return_pct: float
+    benchmark_cagr: float
+    alpha: float
+    beta: float
+    calmar_ratio: float
+
+
 class BacktestResponse(BaseModel):
     symbol: str
     initial_capital: float
@@ -86,9 +111,12 @@ class BacktestResponse(BaseModel):
     sortino_ratio: float
     max_drawdown_pct: float
     total_trades: int
+    trade_analytics: TradeAnalytics
+    benchmark_analytics: BenchmarkAnalytics
     active_position: ActivePosition | None = None
     execution_markers: list[ExecutionMarker]
     equity_curve: list[EquityPoint]
+    benchmark_curve: list[BenchmarkPoint]
     ohlc_history: list[OHLCPoint]
     snapshots: list[PortfolioSnapshot]
     trades: list[TradeItem]
