@@ -23,6 +23,7 @@ import { KPIGrid } from './components/KPIGrid';
 import { TradeAnalyticsPanel } from './components/TradeAnalyticsPanel';
 import { ActivePositionBanner } from './components/ActivePositionBanner';
 import { SynchronizedInspector } from './components/SynchronizedInspector';
+import { MonteCarloPanel } from './components/MonteCarloPanel';
 import { TradeAuditTable } from './components/TradeAuditTable';
 import { CandlestickShape } from './components/charts/CandlestickShape';
 import { ExecutionMarkerShape } from './components/charts/ExecutionMarkerShape';
@@ -30,22 +31,26 @@ import { FastTooltipBridge } from './components/charts/FastTooltipBridge';
 
 export default function App() {
   const [params, setParams] = useState<BacktestParams>({
-  symbol: 'BTC-USD',
-  start_date: '2023-01-01',
-  end_date: '2024-01-01',
-  initial_capital: 100000,
-  fast_ema: 20,
-  slow_ema: 50,
-  risk_fraction: 0.01,
-  atr_multiplier_sl: 2.0,
-  atr_multiplier_tp: 4.0,
-  
-  // Default Market Frictions
-  commission_bps: 5.0,        // 0.05%
-  commission_fixed: 0.0,      // $0.00
-  slippage_bps: 2.0,          // 0.02%
-  gap_slippage_enabled: true,
-});
+    symbol: 'BTC-USD',
+    start_date: '2023-01-01',
+    end_date: '2024-01-01',
+    initial_capital: 100000,
+    fast_ema: 20,
+    slow_ema: 50,
+    risk_fraction: 0.01,
+    atr_multiplier_sl: 2.0,
+    atr_multiplier_tp: 4.0,
+    
+    // Default Market Frictions
+    commission_bps: 5.0,
+    commission_fixed: 0.0,
+    slippage_bps: 2.0,
+    gap_slippage_enabled: true,
+
+    // Monte Carlo Defaults
+    num_simulations: 1000,
+    ruin_threshold_pct: 30.0,
+  });
 
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<BacktestResult | null>(null);
@@ -119,32 +124,31 @@ export default function App() {
   }, []);
 
   const handleRunBacktest = async (e?: React.FormEvent) => {
-  if (e) e.preventDefault();
-  setLoading(true);
-  setError(null);
+    if (e) e.preventDefault();
+    setLoading(true);
+    setError(null);
 
-  try {
-    const response = await axios.post('http://127.0.0.1:8000/api/backtest/run', params);
-    setResults(response.data);
-  } catch (err: any) {
-    const detail = err.response?.data?.detail;
-    if (Array.isArray(detail)) {
-      // Format Pydantic validation array: "atr_multiplier_tp: Input should be greater than 0"
-      const formatted = detail
-        .map((d: any) => `${d.loc?.filter((l: string) => l !== 'body').join('.') || 'Error'}: ${d.msg}`)
-        .join(' | ');
-      setError(formatted);
-    } else if (typeof detail === 'string') {
-      setError(detail);
-    } else if (typeof detail === 'object' && detail !== null) {
-      setError(JSON.stringify(detail));
-    } else {
-      setError(err.message || 'Failed to execute backtest');
+    try {
+      const response = await axios.post('http://127.0.0.1:8000/api/backtest/run', params);
+      setResults(response.data);
+    } catch (err: any) {
+      const detail = err.response?.data?.detail;
+      if (Array.isArray(detail)) {
+        const formatted = detail
+          .map((d: any) => `${d.loc?.filter((l: string) => l !== 'body').join('.') || 'Error'}: ${d.msg}`)
+          .join(' | ');
+        setError(formatted);
+      } else if (typeof detail === 'string') {
+        setError(detail);
+      } else if (typeof detail === 'object' && detail !== null) {
+        setError(JSON.stringify(detail));
+      } else {
+        setError(err.message || 'Failed to execute backtest');
+      }
+    } finally {
+      setLoading(false);
     }
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   const handleMouseLeaveContainer = useCallback(() => {
     if (unifiedTimeline.length > 0) {
@@ -369,6 +373,10 @@ export default function App() {
             pnlRef={pnlRef}
             ddRef={ddRef}
           />
+
+          {/* Monte Carlo Resilience & Tail Risk Model */}
+          <MonteCarloPanel monteCarlo={results.monte_carlo} />
+
           <TradeAuditTable trades={results.trades} />
         </>
       )}

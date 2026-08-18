@@ -4,6 +4,31 @@ from typing import Any, List, Optional
 from pydantic import BaseModel, Field
 
 
+class SimulationBandPoint(BaseModel):
+    trade_step: int
+    p5: float
+    p25: float
+    p50: float
+    p75: float
+    p95: float
+
+
+class MonteCarloAnalytics(BaseModel):
+    num_simulations: int
+    trade_count: int
+    median_max_dd_pct: float
+    p90_max_dd_pct: float
+    p95_max_dd_pct: float
+    p99_max_dd_pct: float
+    risk_of_ruin_pct: float
+    ruin_threshold_pct: float
+    var_95_pct: float
+    cvar_95_pct: float
+    var_99_pct: float
+    cvar_99_pct: float
+    confidence_bands: List[SimulationBandPoint]
+
+
 class BacktestRequest(BaseModel):
     symbol: str
     start_date: str
@@ -20,6 +45,17 @@ class BacktestRequest(BaseModel):
     commission_fixed: float = Field(default=0.0, ge=0.0)
     slippage_bps: float = Field(default=2.0, ge=0.0)
     gap_slippage_enabled: bool = Field(default=True)
+
+    # Monte Carlo Parameters
+    num_simulations: int = Field(
+        default=1_000, ge=100, le=10_000, description="Number of bootstrap resample iterations"
+    )
+    ruin_threshold_pct: float = Field(
+        default=30.0,
+        gt=0.0,
+        lt=100.0,
+        description="Drawdown threshold percentage that constitutes account ruin",
+    )
 
 
 class TradeItem(BaseModel):
@@ -126,6 +162,7 @@ class BacktestResponse(BaseModel):
     total_slippage_paid: Optional[float] = 0.0
     trade_analytics: TradeAnalytics
     benchmark_analytics: BenchmarkAnalytics
+    monte_carlo: Optional[MonteCarloAnalytics] = None
     active_position: Optional[ActivePosition] = None
     execution_markers: List[ExecutionMarker]
     equity_curve: List[EquityPoint]

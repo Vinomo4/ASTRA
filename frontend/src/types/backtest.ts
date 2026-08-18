@@ -1,5 +1,30 @@
 // src/types/backtest.ts
 
+export interface SimulationBandPoint {
+  trade_step: number;
+  p5: number;
+  p25: number;
+  p50: number;
+  p75: number;
+  p95: number;
+}
+
+export interface MonteCarloAnalytics {
+  num_simulations: number;
+  trade_count: number;
+  median_max_dd_pct: number;
+  p90_max_dd_pct: number;
+  p95_max_dd_pct: number;
+  p99_max_dd_pct: number;
+  risk_of_ruin_pct: number;
+  ruin_threshold_pct: number;
+  var_95_pct: number;
+  cvar_95_pct: number;
+  var_99_pct: number;
+  cvar_99_pct: number;
+  confidence_bands: SimulationBandPoint[];
+}
+
 export interface BacktestParams {
   symbol: string;
   start_date: string;
@@ -16,6 +41,10 @@ export interface BacktestParams {
   commission_fixed: number;
   slippage_bps: number;
   gap_slippage_enabled: boolean;
+
+  // Monte Carlo Configurations
+  num_simulations?: number;
+  ruin_threshold_pct?: number;
 }
 
 export interface OHLCPoint {
@@ -116,6 +145,7 @@ export interface BacktestResult {
   total_trades: number;
   total_fees_paid?: number;
   total_slippage_paid?: number;
+  monte_carlo?: MonteCarloAnalytics | null;
   trade_analytics: TradeAnalytics;
   benchmark_analytics: BenchmarkAnalytics;
   active_position: ActivePosition | null;

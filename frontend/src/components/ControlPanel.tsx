@@ -1,6 +1,6 @@
 // src/components/ControlPanel.tsx
 import React, { memo, useState } from 'react';
-import { Play, Coins, Building2, Sliders, ChevronDown, ChevronUp } from 'lucide-react';
+import { Play, Coins, Building2, Sliders, Dna, ChevronDown, ChevronUp } from 'lucide-react';
 import type { BacktestParams } from '../types/backtest';
 
 const ASSET_PRESETS = [
@@ -22,6 +22,7 @@ interface ControlPanelProps {
 
 export const ControlPanel = memo(({ params, setParams, onSubmit, loading, error }: ControlPanelProps) => {
   const [showFrictions, setShowFrictions] = useState(false);
+  const [showMonteCarlo, setShowMonteCarlo] = useState(false);
 
   return (
     <>
@@ -110,7 +111,7 @@ export const ControlPanel = memo(({ params, setParams, onSubmit, loading, error 
               <label className="block text-xs font-semibold text-rose-400 mb-1">SL ATR (x)</label>
               <input 
                 type="number" 
-                step="0.1"
+                step="0.1" 
                 value={params.atr_multiplier_sl} 
                 onChange={(e) => setParams({ ...params, atr_multiplier_sl: Number(e.target.value) })}
                 className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-rose-500"
@@ -121,7 +122,7 @@ export const ControlPanel = memo(({ params, setParams, onSubmit, loading, error 
               <label className="block text-xs font-semibold text-emerald-400 mb-1">TP ATR (x)</label>
               <input 
                 type="number" 
-                step="0.1"
+                step="0.1" 
                 value={params.atr_multiplier_tp} 
                 onChange={(e) => setParams({ ...params, atr_multiplier_tp: Number(e.target.value) })}
                 className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500"
@@ -139,73 +140,119 @@ export const ControlPanel = memo(({ params, setParams, onSubmit, loading, error 
             </div>
           </div>
 
-          <div className="border-t border-slate-800 pt-3">
+          {/* Collapsible Toolbars */}
+          <div className="border-t border-slate-800 pt-3 flex flex-wrap items-center gap-6">
             <button
               type="button"
               onClick={() => setShowFrictions(!showFrictions)}
-              className="text-xs font-semibold text-indigo-400 hover:text-indigo-300 flex items-center gap-1.5 transition"
+              className="text-xs font-semibold text-indigo-400 hover:text-indigo-300 flex items-center gap-1.5 transition select-none"
             >
               <Sliders size={14} /> Market Frictions & Cost Model
               {showFrictions ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
             </button>
 
-            {showFrictions && (
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-3 bg-slate-950/60 p-4 rounded-lg border border-slate-800">
-                <div>
-                  <label className="block text-xs text-slate-400 mb-1">
-                    Commission (bps) <span className="text-slate-500">(1 bps = 0.01%)</span>
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    value={params.commission_bps}
-                    onChange={(e) => setParams({ ...params, commission_bps: Number(e.target.value) })}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs text-slate-400 mb-1">Fixed Fee ($/order)</label>
-                  <input
-                    type="number"
-                    step="0.5"
-                    min="0"
-                    value={params.commission_fixed}
-                    onChange={(e) => setParams({ ...params, commission_fixed: Number(e.target.value) })}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs text-slate-400 mb-1">
-                    Adverse Slippage (bps) <span className="text-slate-500">(Spread / Delay)</span>
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    value={params.slippage_bps}
-                    onChange={(e) => setParams({ ...params, slippage_bps: Number(e.target.value) })}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none"
-                  />
-                </div>
-
-                <div className="flex items-center gap-2 pt-5">
-                  <input
-                    type="checkbox"
-                    id="gap_slippage"
-                    checked={params.gap_slippage_enabled}
-                    onChange={(e) => setParams({ ...params, gap_slippage_enabled: e.target.checked })}
-                    className="w-4 h-4 rounded bg-slate-800 border-slate-700 text-emerald-500 focus:ring-0 cursor-pointer"
-                  />
-                  <label htmlFor="gap_slippage" className="text-xs text-slate-300 cursor-pointer select-none">
-                    Enable Gap-Down SL Slippage
-                  </label>
-                </div>
-              </div>
-            )}
+            <button
+              type="button"
+              onClick={() => setShowMonteCarlo(!showMonteCarlo)}
+              className="text-xs font-semibold text-purple-400 hover:text-purple-300 flex items-center gap-1.5 transition select-none"
+            >
+              <Dna size={14} /> Monte Carlo Stress Testing
+              {showMonteCarlo ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </button>
           </div>
+
+          {/* Friction Sub-Panel */}
+          {showFrictions && (
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-3 bg-slate-950/60 p-4 rounded-lg border border-slate-800">
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">
+                  Commission (bps) <span className="text-slate-500">(1 bps = 0.01%)</span>
+                </label>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={params.commission_bps}
+                  onChange={(e) => setParams({ ...params, commission_bps: Number(e.target.value) })}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Fixed Fee ($/order)</label>
+                <input
+                  type="number"
+                  step="0.5"
+                  min="0"
+                  value={params.commission_fixed}
+                  onChange={(e) => setParams({ ...params, commission_fixed: Number(e.target.value) })}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">
+                  Adverse Slippage (bps) <span className="text-slate-500">(Spread / Delay)</span>
+                </label>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={params.slippage_bps}
+                  onChange={(e) => setParams({ ...params, slippage_bps: Number(e.target.value) })}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 pt-5">
+                <input
+                  type="checkbox"
+                  id="gap_slippage"
+                  checked={params.gap_slippage_enabled}
+                  onChange={(e) => setParams({ ...params, gap_slippage_enabled: e.target.checked })}
+                  className="w-4 h-4 rounded bg-slate-800 border-slate-700 text-emerald-500 focus:ring-0 cursor-pointer"
+                />
+                <label htmlFor="gap_slippage" className="text-xs text-slate-300 cursor-pointer select-none">
+                  Enable Gap-Down SL Slippage
+                </label>
+              </div>
+            </div>
+          )}
+
+          {/* Monte Carlo Sub-Panel */}
+          {showMonteCarlo && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-3 bg-slate-950/60 p-4 rounded-lg border border-slate-800">
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">
+                  Resample Iterations (B) <span className="text-slate-500">(100 - 10,000)</span>
+                </label>
+                <input
+                  type="number"
+                  step="100"
+                  min="100"
+                  max="10000"
+                  value={params.num_simulations ?? 1000}
+                  onChange={(e) => setParams({ ...params, num_simulations: Number(e.target.value) })}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-purple-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">
+                  Ruin Drawdown Barrier (%) <span className="text-slate-500">(Max Loss Tolerance)</span>
+                </label>
+                <input
+                  type="number"
+                  step="5"
+                  min="5"
+                  max="95"
+                  value={params.ruin_threshold_pct ?? 30.0}
+                  onChange={(e) => setParams({ ...params, ruin_threshold_pct: Number(e.target.value) })}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-purple-500"
+                />
+              </div>
+            </div>
+          )}
         </form>
 
         {error && <p className="text-rose-400 text-xs mt-3 font-mono">{error}</p>}

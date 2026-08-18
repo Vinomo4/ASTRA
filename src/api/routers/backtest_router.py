@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException
 import pandas as pd
 
 from src.analytics.metrics import PerformanceAnalytics
+from src.analytics.monte_carlo import MonteCarloSimulator
 from src.api.schemas.backtest_schemas import (
     ActivePosition,
     BacktestRequest,
@@ -13,8 +14,10 @@ from src.api.schemas.backtest_schemas import (
     BenchmarkPoint,
     EquityPoint,
     ExecutionMarker,
+    MonteCarloAnalytics,
     OHLCPoint,
     PortfolioSnapshot,
+    SimulationBandPoint,
     TradeAnalytics,
     TradeItem,
 )
@@ -83,6 +86,29 @@ async def run_backtest(req: BacktestRequest) -> BacktestResponse:
 
     trade_stats = PerformanceAnalytics.calculate_trade_statistics(engine.trades)
 
+    # 4. Monte Carlo Resilience & Stress Testing
+    mc_simulator = MonteCarloSimulator(
+        num_simulations=req.num_simulations,
+        ruin_threshold_pct=req.ruin_threshold_pct,
+    )
+    mc_output = mc_simulator.run(engine.trades, req.initial_capital)
+
+    monte_carlo_res = MonteCarloAnalytics(
+        num_simulations=mc_output.num_simulations,
+        trade_count=mc_output.trade_count,
+        median_max_dd_pct=mc_output.median_max_dd_pct,
+        p90_max_dd_pct=mc_output.p90_max_dd_pct,
+        p95_max_dd_pct=mc_output.p95_max_dd_pct,
+        p99_max_dd_pct=mc_output.p99_max_dd_pct,
+        risk_of_ruin_pct=mc_output.risk_of_ruin_pct,
+        ruin_threshold_pct=mc_output.ruin_threshold_pct,
+        var_95_pct=mc_output.var_95_pct,
+        cvar_95_pct=mc_output.cvar_95_pct,
+        var_99_pct=mc_output.var_99_pct,
+        cvar_99_pct=mc_output.cvar_99_pct,
+        confidence_bands=[SimulationBandPoint(**b) for b in mc_output.confidence_bands],
+    )
+
     benchmark_curve = [
         BenchmarkPoint(
             time=row["timestamp"].strftime("%Y-%m-%d")
@@ -122,7 +148,7 @@ async def run_backtest(req: BacktestRequest) -> BacktestResponse:
         ActivePosition(**results["active_position"]) if results["active_position"] else None
     )
 
-    # 4. Map Trade Audit Records Including All Friction Metrics
+    # 5. Map Trade Audit Records Including All Friction Metrics
     trade_items = [
         TradeItem(
             trade_id=t.trade_id,
@@ -171,6 +197,7 @@ async def run_backtest(req: BacktestRequest) -> BacktestResponse:
             beta=round(beta, 2),
             calmar_ratio=round(calmar, 2),
         ),
+        monte_carlo=monte_carlo_res,
         active_position=active_pos,
         execution_markers=execution_markers,
         equity_curve=equity_points,
