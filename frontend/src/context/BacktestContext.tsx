@@ -1,7 +1,7 @@
 // frontend/src/context/BacktestContext.tsx
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import axios from 'axios';
-import type { BacktestParams, BacktestResult, StrategyMetadata, StrategyPreset } from '../types/backtest';
+import type { BacktestParams, BacktestResult, StrategyMetadata, StrategyPreset } from '../types';
 
 export type WorkspaceTab = 'studio' | 'performance' | 'stress_testing' | 'validation' | 'comparison';
 

@@ -1,16 +1,13 @@
-from __future__ import annotations
-
-# src/main.py
+# src/api/main.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.gzip import GZipMiddleware
+from src.api.routers import router as backtest_router
 
-from src.api.routers import backtest_router
-
-app = FastAPI(title="Quant Strategy Platform API")
-
-# Compress JSON payloads > 500 bytes
-app.add_middleware(GZipMiddleware, minimum_size=500)
+app = FastAPI(
+    title="Quantitative Backtesting & Strategy Engine",
+    description="High-performance algorithmic backtest and alpha attribution platform.",
+    version="1.0.0",
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -20,4 +17,4 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(backtest_router.router)
+app.include_router(backtest_router)

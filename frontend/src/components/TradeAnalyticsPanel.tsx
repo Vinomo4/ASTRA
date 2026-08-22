@@ -1,7 +1,7 @@
 // src/components/TradeAnalyticsPanel.tsx
 import { memo, useState } from 'react';
 import { Gauge, SlidersHorizontal, ChevronDown, ChevronUp } from 'lucide-react';
-import type { TradeAnalytics, TradeItem } from '../types/backtest';
+import type { TradeAnalytics, TradeItem } from '../types';
 
 interface TradeAnalyticsPanelProps {
   analytics: TradeAnalytics;

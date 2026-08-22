@@ -16,7 +16,7 @@ import {
   ReferenceLine,
 } from 'recharts';
 
-import type { UnifiedDataPoint } from '../../types/backtest';
+import type { UnifiedDataPoint } from '../../types';
 import { useBacktest } from '../../context/BacktestContext';
 import { KPIGrid } from '../KPIGrid';
 import { TradeAnalyticsPanel } from '../TradeAnalyticsPanel';

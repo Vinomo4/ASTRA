@@ -1,6 +1,6 @@
 // src/components/charts/ExecutionMarkerShape.tsx
 import { memo } from 'react';
-import type { ExecutionMarker } from '../../types/backtest';
+import type { ExecutionMarker } from '../../types';
 
 interface MarkerProps {
   cx?: number;

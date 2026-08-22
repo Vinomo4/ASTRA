@@ -11,7 +11,7 @@ import {
   CartesianGrid,
 } from 'recharts';
 import { Dna, ShieldAlert, AlertTriangle } from 'lucide-react';
-import type { MonteCarloAnalytics } from '../types/backtest';
+import type { MonteCarloAnalytics } from '../types';
 
 interface MonteCarloPanelProps {
   monteCarlo?: MonteCarloAnalytics | null;

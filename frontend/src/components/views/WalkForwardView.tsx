@@ -13,7 +13,7 @@ import {
 } from 'recharts';
 import { ShieldCheck, ShieldAlert, Cpu, Play, CheckCircle2, AlertTriangle, XCircle } from 'lucide-react';
 import { useBacktest } from '../../context/BacktestContext';
-import type { WalkForwardResponse } from '../../types/backtest';
+import type { WalkForwardResponse } from '../../types';
 
 export const WalkForwardView: React.FC = () => {
   const { params } = useBacktest();

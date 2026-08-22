@@ -12,7 +12,7 @@ import {
 } from 'recharts';
 import { GitCompare, Trophy, TrendingUp, Play, AlertCircle, RefreshCw } from 'lucide-react';
 import { useBacktest } from '../../context/BacktestContext';
-import type { ComparisonResponse } from '../../types/backtest';
+import type { ComparisonResponse } from '../../types';
 
 interface SelectedModelOption {
   type: 'base' | 'preset';

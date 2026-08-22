@@ -1,7 +1,7 @@
 // src/components/ActivePositionBanner.tsx
 import { memo } from 'react';
 import { AlertCircle } from 'lucide-react';
-import type { ActivePosition } from '../types/backtest';
+import type { ActivePosition } from '../types';
 
 interface ActivePositionBannerProps {
   position: ActivePosition;

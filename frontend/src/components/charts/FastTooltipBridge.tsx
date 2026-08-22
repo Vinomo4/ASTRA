@@ -1,6 +1,6 @@
 // src/components/charts/FastTooltipBridge.tsx
 import { memo } from 'react';
-import type { UnifiedDataPoint } from '../../types/backtest';
+import type { UnifiedDataPoint } from '../../types';
 
 interface FastTooltipBridgeProps {
   active?: boolean;

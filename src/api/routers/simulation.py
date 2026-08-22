@@ -1,4 +1,4 @@
-# src/api/routers/backtest_router.py
+# src/api/routers/simulation.py
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
@@ -18,30 +18,15 @@ from src.api.schemas.backtest_schemas import (
     OHLCPoint,
     PortfolioSnapshot,
     SimulationBandPoint,
-    StrategyListResponse,
     TradeAnalytics,
     TradeItem,
-    StrategyPresetCreate,
-    StrategyPresetListResponse,
-    StrategyPresetResponse,
 )
 from src.backtester.event_engine import BacktestEngine
 from src.data_engine.storage_manager import StorageManager
 from src.data_engine.yfinance_loader import YFinanceLoader
 from src.strategies import StrategyRegistry
-from src.api.schemas.backtest_schemas import WalkForwardRequest, WalkForwardResponse
-from src.backtester.walk_forward import WalkForwardEngine
-from src.api.schemas.backtest_schemas import ComparisonRequest, ComparisonResponse
-from src.backtester.comparator import ComparatorEngine
 
-router = APIRouter(prefix="/api/backtest", tags=["Backtest"])
-
-
-@router.get("/strategies", response_model=StrategyListResponse)
-async def list_available_strategies() -> StrategyListResponse:
-    """Returns metadata and parameter schemas for all registered strategies."""
-    strategies = StrategyRegistry.list_strategies()
-    return StrategyListResponse(strategies=[s.model_dump() for s in strategies])
+router = APIRouter()
 
 
 @router.post("/run", response_model=BacktestResponse)
@@ -68,8 +53,6 @@ async def run_backtest(req: BacktestRequest) -> BacktestResponse:
 
     # 2. Polymorphic Strategy Instantiation
     strategy_params = dict(req.strategy_params)
-
-    # Backward compatibility fallback for legacy requests
     if "fast_ema" not in strategy_params and req.fast_ema is not None:
         strategy_params["fast_ema"] = req.fast_ema
     if "slow_ema" not in strategy_params and req.slow_ema is not None:
@@ -82,7 +65,7 @@ async def run_backtest(req: BacktestRequest) -> BacktestResponse:
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=f"Invalid strategy parameters: {exc}") from exc
 
-    # 3. Run Backtest with Market Frictions & Selected Strategy
+    # 3. Run Backtest Engine
     engine = BacktestEngine(
         strategy=strategy,
         initial_capital=req.initial_capital,
@@ -97,7 +80,7 @@ async def run_backtest(req: BacktestRequest) -> BacktestResponse:
 
     results = engine.run(df)
 
-    # 4. Compute Benchmark Curve (Buy & Hold of Base Asset)
+    # 4. Compute Benchmark Curve
     sorted_df = df.sort_values("timestamp").reset_index(drop=True)
     initial_close = float(sorted_df.iloc[0]["close"])
     benchmark_shares = req.initial_capital / initial_close
@@ -116,7 +99,7 @@ async def run_backtest(req: BacktestRequest) -> BacktestResponse:
 
     trade_stats = PerformanceAnalytics.calculate_trade_statistics(engine.trades)
 
-    # 5. Monte Carlo Resilience & Stress Testing
+    # 5. Monte Carlo Resilience
     mc_simulator = MonteCarloSimulator(
         num_simulations=req.num_simulations,
         ruin_threshold_pct=req.ruin_threshold_pct,
@@ -178,7 +161,6 @@ async def run_backtest(req: BacktestRequest) -> BacktestResponse:
         ActivePosition(**results["active_position"]) if results["active_position"] else None
     )
 
-    # 6. Map Trade Audit Records Including Friction Costs
     trade_items = [
         TradeItem(
             trade_id=t.trade_id,
@@ -236,111 +218,3 @@ async def run_backtest(req: BacktestRequest) -> BacktestResponse:
         snapshots=snapshots,
         trades=trade_items,
     )
-
-
-@router.get("/presets", response_model=StrategyPresetListResponse)
-async def list_strategy_presets() -> StrategyPresetListResponse:
-    """Returns all saved user strategy configuration presets."""
-    storage = StorageManager()
-    presets = storage.list_strategy_presets()
-    return StrategyPresetListResponse(presets=[StrategyPresetResponse(**p) for p in presets])
-
-
-@router.post("/presets", response_model=StrategyPresetResponse)
-async def save_strategy_preset(req: StrategyPresetCreate) -> StrategyPresetResponse:
-    """Creates or updates a persistent named strategy parameter profile."""
-    # Verify strategy exists in registry
-    if req.strategy_id not in StrategyRegistry._registry:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Cannot save preset for unregistered strategy '{req.strategy_id}'.",
-        )
-
-    storage = StorageManager()
-    saved = storage.save_strategy_preset(
-        preset_name=req.preset_name,
-        strategy_id=req.strategy_id,
-        strategy_params=req.strategy_params,
-        risk_fraction=req.risk_fraction,
-        atr_multiplier_sl=req.atr_multiplier_sl,
-        atr_multiplier_tp=req.atr_multiplier_tp,
-        commission_bps=req.commission_bps,
-        commission_fixed=req.commission_fixed,
-        slippage_bps=req.slippage_bps,
-        gap_slippage_enabled=req.gap_slippage_enabled,
-        description=req.description,
-    )
-    return StrategyPresetResponse(**saved)
-
-
-@router.delete("/presets/{preset_name}")
-async def delete_strategy_preset(preset_name: str) -> dict[str, str]:
-    """Deletes a saved strategy preset."""
-    storage = StorageManager()
-    existing = storage.get_strategy_preset(preset_name)
-    if not existing:
-        raise HTTPException(status_code=404, detail=f"Preset '{preset_name}' not found.")
-
-    storage.delete_strategy_preset(preset_name)
-    return {"message": f"Preset '{preset_name}' successfully deleted."}
-
-
-@router.post("/walk-forward", response_model=WalkForwardResponse)
-async def run_walk_forward_validation(req: WalkForwardRequest) -> WalkForwardResponse:
-    """
-    Executes an In-Sample vs. Out-of-Sample chronological validation split
-    and computes the Walk-Forward Efficiency Ratio (WFER) for overfitting diagnostics.
-    """
-    engine = WalkForwardEngine()
-    try:
-        results = engine.run_split_validation(
-            symbol=req.symbol,
-            start_date=req.start_date,
-            end_date=req.end_date,
-            strategy_id=req.strategy_id,
-            strategy_params=req.strategy_params,
-            initial_capital=req.initial_capital,
-            train_ratio=req.train_ratio,
-            risk_fraction=req.risk_fraction,
-            atr_multiplier_sl=req.atr_multiplier_sl,
-            atr_multiplier_tp=req.atr_multiplier_tp,
-            commission_bps=req.commission_bps,
-            commission_fixed=req.commission_fixed,
-            slippage_bps=req.slippage_bps,
-            gap_slippage_enabled=req.gap_slippage_enabled,
-        )
-        return WalkForwardResponse(**results)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-@router.post("/compare", response_model=ComparisonResponse)
-async def run_strategy_comparison(req: ComparisonRequest) -> ComparisonResponse:
-    """
-    Executes a side-by-side comparative backtest between Strategy A and Strategy B
-    under identical data, initial capital, and friction conditions.
-    """
-    engine = ComparatorEngine()
-    try:
-        results = engine.run_comparison(
-            symbol=req.symbol,
-            start_date=req.start_date,
-            end_date=req.end_date,
-            strategy_a_id=req.strategy_a.strategy_id,
-            strategy_a_params=req.strategy_a.strategy_params,
-            strategy_a_name=req.strategy_a.name,
-            strategy_b_id=req.strategy_b.strategy_id,
-            strategy_b_params=req.strategy_b.strategy_params,
-            strategy_b_name=req.strategy_b.name,
-            initial_capital=req.initial_capital,
-            risk_fraction=req.risk_fraction,
-            atr_multiplier_sl=req.atr_multiplier_sl,
-            atr_multiplier_tp=req.atr_multiplier_tp,
-            commission_bps=req.commission_bps,
-            commission_fixed=req.commission_fixed,
-            slippage_bps=req.slippage_bps,
-            gap_slippage_enabled=req.gap_slippage_enabled,
-        )
-        return ComparisonResponse(**results)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))

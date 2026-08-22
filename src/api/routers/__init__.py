@@ -1,9 +1,16 @@
 # src/api/routers/__init__.py
-from . import backtest_router, data_router, ml_router, ws_router
+from fastapi import APIRouter
 
-__all__ = [
-    "backtest_router",
-    "data_router",
-    "ml_router",
-    "ws_router",
-]
+from src.api.routers.comparison import router as comparison_router
+from src.api.routers.simulation import router as simulation_router
+from src.api.routers.strategies import router as strategies_router
+from src.api.routers.validation import router as validation_router
+
+router = APIRouter(prefix="/api/backtest", tags=["Backtest"])
+
+router.include_router(strategies_router)
+router.include_router(simulation_router)
+router.include_router(validation_router)
+router.include_router(comparison_router)
+
+__all__ = ["router"]

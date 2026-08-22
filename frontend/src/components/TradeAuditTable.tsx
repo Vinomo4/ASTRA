@@ -1,6 +1,6 @@
 // src/components/TradeAuditTable.tsx
 import { memo } from 'react';
-import type { TradeItem } from '../types/backtest';
+import type { TradeItem } from '../types';
 
 const getExitBadge = (reason: string) => {
   switch (reason) {

@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { Calendar, ChevronDown, Play, DollarSign, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useBacktest, getDefaultDateRange } from '../../context/BacktestContext';
 import { AssetPickerModal } from './AssetPickerModal';
-import { ASSET_CATALOG } from '../../types/backtest';
+import { ASSET_CATALOG } from '../../types';
 
 type DurationOption = '1Y' | '2Y' | '3Y' | '5Y' | 'custom';
 

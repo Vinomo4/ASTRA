@@ -1,7 +1,7 @@
 // src/components/SynchronizedInspector.tsx
 import React, { memo } from 'react';
 import { Clock } from 'lucide-react';
-import type { UnifiedDataPoint } from '../types/backtest';
+import type { UnifiedDataPoint } from '../types';
 
 export interface SynchronizedInspectorProps {
   initialSnapshot: UnifiedDataPoint | null;

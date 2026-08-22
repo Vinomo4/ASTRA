@@ -1,7 +1,7 @@
 // src/components/KPIGrid.tsx
 import { memo, useState } from 'react';
 import { DollarSign, TrendingUp, Activity, ShieldAlert, Scale, Receipt, ChevronDown, ChevronUp } from 'lucide-react';
-import type { BacktestResult } from '../types/backtest';
+import type { BacktestResult } from '../types';
 
 interface KPIGridProps {
   results: BacktestResult;

@@ -18,7 +18,7 @@ import {
   Clock,
 } from 'lucide-react';
 import { useBacktest } from '../../context/BacktestContext';
-import type { StrategyMetadata, StrategyPreset, StrategyRule } from '../../types/backtest';
+import type { StrategyMetadata, StrategyPreset, StrategyRule } from '../../types';
 
 const AVAILABLE_INDICATORS = [
   { value: 'close', label: 'Close Price' },

@@ -14,7 +14,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import type { BacktestParams, StrategyMetadata, StrategyPreset } from '../types/backtest';
+import type { BacktestParams, StrategyMetadata, StrategyPreset } from '../types';
 
 const ASSET_PRESETS = [
   { symbol: 'AAPL', label: 'Apple Inc.', type: 'equity' },
