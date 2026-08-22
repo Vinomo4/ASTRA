@@ -1,7 +1,7 @@
 // frontend/src/components/layout/AssetPickerModal.tsx
 import React, { useState, useMemo } from 'react';
 import { Search, X, Check, Coins, Building2, TrendingUp, DollarSign } from 'lucide-react';
-import { ASSET_CATALOG, type AssetInfo, type AssetCategory } from '../../types';
+import { ASSET_CATALOG, type AssetCategory } from '../../types';
 
 interface AssetPickerModalProps {
   isOpen: boolean;

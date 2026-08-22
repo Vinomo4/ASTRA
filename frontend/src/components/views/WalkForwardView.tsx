@@ -11,7 +11,7 @@ import {
   CartesianGrid,
   ReferenceLine,
 } from 'recharts';
-import { ShieldCheck, ShieldAlert, Cpu, Play, CheckCircle2, AlertTriangle, XCircle } from 'lucide-react';
+import { ShieldCheck, Cpu, Play, CheckCircle2, AlertTriangle, XCircle } from 'lucide-react';
 import { useBacktest } from '../../context/BacktestContext';
 import type { WalkForwardResponse } from '../../types';
 

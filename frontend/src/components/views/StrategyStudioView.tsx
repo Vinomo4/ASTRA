@@ -705,7 +705,7 @@ export const StrategyStudioView: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-xs text-rose-400 mb-1">Stop-Loss ATR Multiplier ($k_{SL}$)</label>
+              <label className="block text-xs text-rose-400 mb-1">Stop-Loss ATR Multiplier ({'$k_{SL}$'})</label>
               <input
                 type="number"
                 step="0.1"
@@ -716,7 +716,7 @@ export const StrategyStudioView: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-xs text-emerald-400 mb-1">Take-Profit ATR Multiplier ($k_{TP}$)</label>
+              <label className="block text-xs text-emerald-400 mb-1">Take-Profit ATR Multiplier ({'$k_{TP}$'})</label>
               <input
                 type="number"
                 step="0.1"

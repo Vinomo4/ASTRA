@@ -1,6 +1,6 @@
 // src/components/views/StressTestingView.tsx
 import React from 'react';
-import { ShieldAlert, AlertCircle } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 import { useBacktest } from '../../context/BacktestContext';
 import { MonteCarloPanel } from '../MonteCarloPanel';
 

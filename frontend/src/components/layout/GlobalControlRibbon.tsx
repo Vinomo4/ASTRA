@@ -1,6 +1,6 @@
 // frontend/src/components/layout/GlobalControlRibbon.tsx
 import React, { useState } from 'react';
-import { Calendar, ChevronDown, Play, DollarSign, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Calendar, ChevronDown, Play, DollarSign, AlertCircle,  } from 'lucide-react';
 import { useBacktest, getDefaultDateRange } from '../../context/BacktestContext';
 import { AssetPickerModal } from './AssetPickerModal';
 import { ASSET_CATALOG } from '../../types';
