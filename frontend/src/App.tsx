@@ -7,6 +7,7 @@ import { StrategyStudioView } from './components/views/StrategyStudioView';
 import { PerformanceAuditView } from './components/views/PerformanceAuditView';
 import { StressTestingView } from './components/views/StressTestingView';
 import { WalkForwardView } from './components/views/WalkForwardView';
+import { ModelComparisonView } from './components/views/ModelComparisonView';
 
 const WorkspaceRouter: React.FC = () => {
   const { activeTab } = useBacktest();
@@ -17,12 +18,7 @@ const WorkspaceRouter: React.FC = () => {
       {activeTab === 'performance' && <PerformanceAuditView />}
       {activeTab === 'stress_testing' && <StressTestingView />}
       {activeTab === 'validation' && <WalkForwardView />}
-      {activeTab === 'comparison' && (
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-12 text-center text-slate-400">
-          <h3 className="text-base font-semibold text-white">Model Benchmark & Alpha Attribution Workspace</h3>
-          <p className="text-xs text-slate-400 mt-2">Planned for next step.</p>
-        </div>
-      )}
+      {activeTab === 'comparison' && <ModelComparisonView />}
     </main>
   );
 };

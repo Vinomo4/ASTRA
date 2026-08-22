@@ -1,6 +1,6 @@
 // frontend/src/components/layout/GlobalControlRibbon.tsx
 import React, { useState } from 'react';
-import { Calendar, ChevronDown, Play, DollarSign } from 'lucide-react';
+import { Calendar, ChevronDown, Play, DollarSign, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useBacktest, getDefaultDateRange } from '../../context/BacktestContext';
 import { AssetPickerModal } from './AssetPickerModal';
 import { ASSET_CATALOG } from '../../types/backtest';
@@ -8,7 +8,7 @@ import { ASSET_CATALOG } from '../../types/backtest';
 type DurationOption = '1Y' | '2Y' | '3Y' | '5Y' | 'custom';
 
 export const GlobalControlRibbon: React.FC = () => {
-  const { params, setParams, runSimulation, loading, selectAsset } = useBacktest();
+  const { params, setParams, runSimulation, loading, selectAsset, isDirty, lastRunParams } = useBacktest();
   const [isAssetModalOpen, setIsAssetModalOpen] = useState(false);
   const [activeDuration, setActiveDuration] = useState<DurationOption>('2Y');
 
@@ -19,11 +19,14 @@ export const GlobalControlRibbon: React.FC = () => {
     exchange: 'Exchange',
   };
 
+  const isDateStale =
+    lastRunParams &&
+    (params.start_date !== lastRunParams.start_date || params.end_date !== lastRunParams.end_date);
+
   const handleQuickDuration = (years: number, label: DurationOption) => {
     setActiveDuration(label);
     const { start_date, end_date } = getDefaultDateRange(years);
 
-    // Only update parameters in state — do not trigger simulation automatically
     setParams((prev) => ({
       ...prev,
       start_date,
@@ -38,9 +41,15 @@ export const GlobalControlRibbon: React.FC = () => {
 
   return (
     <>
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-3.5 mb-6 shadow-sm">
+      <div
+        className={`rounded-xl p-3.5 mb-6 shadow-sm transition-all duration-200 border ${
+          isDirty
+            ? 'bg-slate-900/95 border-amber-500/60 ring-1 ring-amber-500/30'
+            : 'bg-slate-900 border-slate-800'
+        }`}
+      >
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          {/* Asset Selector & Capital */}
+          {/* Asset & Capital Selector */}
           <div className="flex items-center gap-3">
             <button
               type="button"
@@ -75,9 +84,9 @@ export const GlobalControlRibbon: React.FC = () => {
             </div>
           </div>
 
-          {/* Interactive Date Range & Duration Chips */}
+          {/* Date Window Controls & Status Accent */}
           <div className="flex flex-wrap items-center gap-3">
-            {/* Duration Selector */}
+            {/* Quick Duration Chips */}
             <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
               {(['1Y', '2Y', '3Y', '5Y'] as const).map((label) => {
                 const years = parseInt(label.replace('Y', ''), 10);
@@ -89,7 +98,9 @@ export const GlobalControlRibbon: React.FC = () => {
                     onClick={() => handleQuickDuration(years, label)}
                     className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition ${
                       isActive
-                        ? 'bg-emerald-500/20 border-emerald-500/60 text-emerald-300 shadow-sm'
+                        ? isDateStale
+                          ? 'bg-amber-500/20 border-amber-500 text-amber-300 shadow-sm'
+                          : 'bg-emerald-500/20 border-emerald-500/60 text-emerald-300 shadow-sm'
                         : 'border-transparent text-slate-400 hover:text-white hover:bg-slate-800/50'
                     }`}
                   >
@@ -99,32 +110,51 @@ export const GlobalControlRibbon: React.FC = () => {
               })}
             </div>
 
-            {/* Date Pickers */}
-            <div className="flex items-center gap-2 bg-slate-950 border border-slate-800 px-3 py-1.5 rounded-xl text-xs">
-              <Calendar size={14} className="text-indigo-400" />
+            {/* Date Inputs with Dynamic Accent */}
+            <div
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs transition border ${
+                isDateStale
+                  ? 'bg-amber-950/40 border-amber-500/70 text-amber-200'
+                  : 'bg-slate-950 border-slate-800 text-white'
+              }`}
+            >
+              <Calendar size={14} className={isDateStale ? 'text-amber-400' : 'text-indigo-400'} />
               <input
                 type="date"
                 value={params.start_date}
                 onChange={(e) => handleDateChange('start_date', e.target.value)}
-                className="bg-transparent text-white focus:outline-none font-mono text-xs cursor-pointer"
+                className="bg-transparent focus:outline-none font-mono text-xs cursor-pointer text-white"
               />
-              <span className="text-slate-500">→</span>
+              <span className={isDateStale ? 'text-amber-500' : 'text-slate-500'}>→</span>
               <input
                 type="date"
                 value={params.end_date}
                 onChange={(e) => handleDateChange('end_date', e.target.value)}
-                className="bg-transparent text-white focus:outline-none font-mono text-xs cursor-pointer"
+                className="bg-transparent focus:outline-none font-mono text-xs cursor-pointer text-white"
               />
+              {isDateStale && (
+                <span
+                  title="Date window changed - click Run Backtest to apply"
+                  className="text-[10px] text-amber-400 font-bold bg-amber-950 border border-amber-800 px-1.5 py-0.5 rounded ml-1 flex items-center gap-1 font-mono"
+                >
+                  <AlertCircle size={10} /> Pending
+                </span>
+              )}
             </div>
 
-            {/* Manual Run Backtest Trigger */}
+            {/* Run Button with Dynamic Style */}
             <button
               type="button"
               onClick={() => runSimulation()}
               disabled={loading}
-              className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-4 py-2.5 rounded-xl flex items-center gap-1.5 transition disabled:opacity-50 shadow-md shadow-emerald-950"
+              className={`font-bold text-xs px-4 py-2.5 rounded-xl flex items-center gap-1.5 transition disabled:opacity-50 shadow-md ${
+                isDirty
+                  ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-amber-950 animate-pulse'
+                  : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-950'
+              }`}
             >
-              <Play size={14} /> {loading ? 'Simulating...' : 'Run Backtest'}
+              <Play size={14} className={isDirty ? 'fill-slate-950' : ''} />
+              {loading ? 'Simulating...' : isDirty ? 'Run to Update' : 'Run Backtest'}
             </button>
           </div>
         </div>

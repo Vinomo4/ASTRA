@@ -1,5 +1,5 @@
 // frontend/src/context/BacktestContext.tsx
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import axios from 'axios';
 import type { BacktestParams, BacktestResult, StrategyMetadata, StrategyPreset } from '../types/backtest';
 
@@ -20,6 +20,8 @@ interface BacktestContextType {
   setActiveTab: (tab: WorkspaceTab) => void;
   params: BacktestParams;
   setParams: React.Dispatch<React.SetStateAction<BacktestParams>>;
+  lastRunParams: BacktestParams | null;
+  isDirty: boolean;
   results: BacktestResult | null;
   loading: boolean;
   error: string | null;
@@ -70,7 +72,21 @@ export const BacktestProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     ruin_threshold_pct: 30.0,
   });
 
+  const [lastRunParams, setLastRunParams] = useState<BacktestParams | null>(null);
   const hasAutoInitialized = useRef(false);
+
+  // Computes whether the current input parameters differ from the active backtest results
+  const isDirty = useMemo(() => {
+    if (!lastRunParams) return false;
+    return (
+      params.symbol !== lastRunParams.symbol ||
+      params.start_date !== lastRunParams.start_date ||
+      params.end_date !== lastRunParams.end_date ||
+      params.strategy_id !== lastRunParams.strategy_id ||
+      params.initial_capital !== lastRunParams.initial_capital ||
+      JSON.stringify(params.strategy_params) !== JSON.stringify(lastRunParams.strategy_params)
+    );
+  }, [params, lastRunParams]);
 
   const runSimulation = useCallback(async (overrideParams?: BacktestParams) => {
     const activeParams = overrideParams || params;
@@ -79,6 +95,7 @@ export const BacktestProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     try {
       const response = await axios.post('http://127.0.0.1:8000/api/backtest/run', activeParams);
       setResults(response.data);
+      setLastRunParams(JSON.parse(JSON.stringify(activeParams)));
     } catch (err: any) {
       const detail = err.response?.data?.detail;
       if (Array.isArray(detail)) {
@@ -129,7 +146,6 @@ export const BacktestProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const p = presets.find((item) => item.preset_name === presetName);
     if (!p) return;
 
-    // Update state parameters only without running simulation
     setParams((prev) => ({
       ...prev,
       strategy_id: p.strategy_id,
@@ -151,6 +167,8 @@ export const BacktestProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setActiveTab,
         params,
         setParams,
+        lastRunParams,
+        isDirty,
         results,
         loading,
         error,
