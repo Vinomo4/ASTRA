@@ -1,5 +1,5 @@
-# tests/strategies/test_volatility_breakout.py
-from datetime import datetime
+from datetime import UTC, datetime
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -109,7 +109,7 @@ class TestVolatilityBreakoutStrategy:
         # Feed 5 bars with high = 105.0
         for i in range(5):
             bar = MarketDataEvent(
-                timestamp=datetime(2023, 1, i + 1),
+                timestamp=datetime(2023, 1, i + 1, tzinfo=UTC),
                 symbol="BTC-USD",
                 open=100.0,
                 high=105.0,
@@ -122,7 +122,7 @@ class TestVolatilityBreakoutStrategy:
 
         # Bar 6: close at 106.0 breaks above the prior 5-bar high of 105.0
         breakout_bar = MarketDataEvent(
-            timestamp=datetime(2023, 1, 6),
+            timestamp=datetime(2023, 1, 6, tzinfo=UTC),
             symbol="BTC-USD",
             open=102.0,
             high=108.0,

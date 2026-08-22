@@ -62,8 +62,8 @@ class FillEvent(Event):
 
 __all__ = [
     "Event",
-    "MarketDataEvent",
-    "SignalEvent",
-    "OrderEvent",
     "FillEvent",
+    "MarketDataEvent",
+    "OrderEvent",
+    "SignalEvent",
 ]

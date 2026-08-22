@@ -1,15 +1,16 @@
 # src/api/schemas/backtest_schemas.py
 from __future__ import annotations
 
-from typing import Any, List, Optional
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 # Single source of truth for strategy metadata
-from src.strategies.base_strategy import ParameterDefinition, StrategyMetadata
+from src.strategies.base_strategy import StrategyMetadata
 
 
 class StrategyListResponse(BaseModel):
-    strategies: List[StrategyMetadata]
+    strategies: list[StrategyMetadata]
 
 
 class SimulationBandPoint(BaseModel):
@@ -34,7 +35,7 @@ class MonteCarloAnalytics(BaseModel):
     cvar_95_pct: float
     var_99_pct: float
     cvar_99_pct: float
-    confidence_bands: List[SimulationBandPoint]
+    confidence_bands: list[SimulationBandPoint]
 
 
 class BacktestRequest(BaseModel):
@@ -54,8 +55,8 @@ class BacktestRequest(BaseModel):
     )
 
     # Legacy direct parameters for backward compatibility
-    fast_ema: Optional[int] = Field(default=20, gt=0)
-    slow_ema: Optional[int] = Field(default=50, gt=0)
+    fast_ema: int | None = Field(default=20, gt=0)
+    slow_ema: int | None = Field(default=50, gt=0)
 
     # Risk Management Parameters
     risk_fraction: float = Field(default=0.01, gt=0, le=1.0)
@@ -135,10 +136,10 @@ class EquityPoint(BaseModel):
 class ExecutionMarker(BaseModel):
     time: str
     price: float
-    nominal_price: Optional[float] = None
+    nominal_price: float | None = None
     side: str
     quantity: float
-    reason: Optional[str] = None
+    reason: str | None = None
 
 
 class ActivePosition(BaseModel):
@@ -149,8 +150,8 @@ class ActivePosition(BaseModel):
     quantity: float
     unrealized_pnl: float
     unrealized_pnl_pct: float
-    stop_loss: Optional[float] = None
-    take_profit: Optional[float] = None
+    stop_loss: float | None = None
+    take_profit: float | None = None
 
 
 class TradeAnalytics(BaseModel):
@@ -183,18 +184,18 @@ class BacktestResponse(BaseModel):
     sortino_ratio: float
     max_drawdown_pct: float
     total_trades: int
-    total_fees_paid: Optional[float] = 0.0
-    total_slippage_paid: Optional[float] = 0.0
+    total_fees_paid: float | None = 0.0
+    total_slippage_paid: float | None = 0.0
     trade_analytics: TradeAnalytics
     benchmark_analytics: BenchmarkAnalytics
-    monte_carlo: Optional[MonteCarloAnalytics] = None
-    active_position: Optional[ActivePosition] = None
-    execution_markers: List[ExecutionMarker]
-    equity_curve: List[EquityPoint]
-    benchmark_curve: List[BenchmarkPoint]
-    ohlc_history: List[OHLCPoint]
-    snapshots: List[PortfolioSnapshot]
-    trades: List[TradeItem]
+    monte_carlo: MonteCarloAnalytics | None = None
+    active_position: ActivePosition | None = None
+    execution_markers: list[ExecutionMarker]
+    equity_curve: list[EquityPoint]
+    benchmark_curve: list[BenchmarkPoint]
+    ohlc_history: list[OHLCPoint]
+    snapshots: list[PortfolioSnapshot]
+    trades: list[TradeItem]
 
 
 # --- Strategy Preset Management Schemas ---
@@ -219,7 +220,7 @@ class StrategyPresetResponse(StrategyPresetCreate):
 
 
 class StrategyPresetListResponse(BaseModel):
-    presets: List[StrategyPresetResponse]
+    presets: list[StrategyPresetResponse]
 
 
 class WalkForwardRequest(BaseModel):
@@ -257,8 +258,8 @@ class ValidationMetricsBlock(BaseModel):
 
 class ValidationTimelinePoint(BaseModel):
     time: str
-    equity_is: Optional[float] = None
-    equity_oos: Optional[float] = None
+    equity_is: float | None = None
+    equity_oos: float | None = None
     is_oos: bool
 
 
@@ -275,7 +276,7 @@ class WalkForwardResponse(BaseModel):
     sharpe_decay_pct: float
     in_sample: ValidationMetricsBlock
     out_of_sample: ValidationMetricsBlock
-    combined_timeline: List[ValidationTimelinePoint]
+    combined_timeline: list[ValidationTimelinePoint]
 
 
 class ComparisonModelConfig(BaseModel):
@@ -339,4 +340,4 @@ class ComparisonResponse(BaseModel):
     strategy_a: StrategyComparisonMetrics
     strategy_b: StrategyComparisonMetrics
     attribution: AlphaAttributionDelta
-    timeline: List[ComparisonTimelinePoint]
+    timeline: list[ComparisonTimelinePoint]

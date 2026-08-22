@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+
 from src.core.constants import OrderSide
 from src.core.events import OrderEvent
 

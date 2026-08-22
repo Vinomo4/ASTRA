@@ -60,4 +60,4 @@ def macd(close: pd.Series, fast: int = 12, slow: int = 26, signal: int = 9) -> p
     return pd.DataFrame({"macd": macd_line, "signal": signal_line, "histogram": histogram})
 
 
-__all__ = ["TechnicalFeatures", "rsi", "atr", "macd"]
+__all__ = ["TechnicalFeatures", "atr", "macd", "rsi"]

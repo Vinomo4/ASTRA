@@ -1,8 +1,8 @@
 # src/api/routers/simulation.py
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
 import pandas as pd
+from fastapi import APIRouter, HTTPException
 
 from src.analytics.metrics import PerformanceAnalytics
 from src.analytics.monte_carlo import MonteCarloSimulator

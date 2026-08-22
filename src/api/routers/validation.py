@@ -34,5 +34,5 @@ async def run_walk_forward_validation(req: WalkForwardRequest) -> WalkForwardRes
             gap_slippage_enabled=req.gap_slippage_enabled,
         )
         return WalkForwardResponse(**results)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except (ValueError, KeyError, RuntimeError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

@@ -238,9 +238,7 @@ class BacktestEngine:
                     and high_price >= current_position.take_profit
                 ):
                     exit_price = (
-                        open_price
-                        if open_price > current_position.take_profit
-                        else current_position.take_profit
+                        max(current_position.take_profit, open_price)
                     )
                     self._close_position(current_position, exit_price, current_time, "TAKE_PROFIT")
 
@@ -249,8 +247,7 @@ class BacktestEngine:
             # -------------------------------------------------------------
             current_position.update_market_price(close_price)
             total_equity = self.capital + (current_position.quantity * close_price)
-            if total_equity > peak_equity:
-                peak_equity = total_equity
+            peak_equity = max(peak_equity, total_equity)
 
             drawdown_pct = ((total_equity - peak_equity) / peak_equity) * 100.0
             unrealized_pnl = (
@@ -358,4 +355,4 @@ class BacktestEngine:
         }
 
 
-__all__ = ["EventEngine", "BacktestEngine"]
+__all__ = ["BacktestEngine", "EventEngine"]

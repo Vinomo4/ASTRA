@@ -37,5 +37,5 @@ async def run_strategy_comparison(req: ComparisonRequest) -> ComparisonResponse:
             gap_slippage_enabled=req.gap_slippage_enabled,
         )
         return ComparisonResponse(**results)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except (ValueError, KeyError, RuntimeError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

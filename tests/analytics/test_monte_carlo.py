@@ -1,6 +1,6 @@
 # tests/analytics/test_monte_carlo.py
-from datetime import datetime, timezone
-import pytest
+from datetime import UTC, datetime
+
 from src.analytics.monte_carlo import MonteCarloSimulator
 from src.core.constants import OrderSide
 from src.core.models import TradeRecord
@@ -8,8 +8,8 @@ from src.core.models import TradeRecord
 
 def make_trade(pnl: float, pnl_pct: float) -> TradeRecord:
     """Helper to instantiate mock TradeRecord objects matching core models."""
-    now = datetime.now(timezone.utc)
-    side = list(OrderSide)[0]  # Adapts dynamically to BUY/SELL or LONG/SHORT enums
+    now = datetime.now(UTC)
+    side = next(iter(OrderSide))  # Adapts dynamically to BUY/SELL or LONG/SHORT enums
 
     return TradeRecord(
         symbol="BTC-USD",

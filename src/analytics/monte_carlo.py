@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
+
 import numpy as np
 
 from src.core.models import TradeRecord

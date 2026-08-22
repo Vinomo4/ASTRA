@@ -1,9 +1,7 @@
-# src/strategies/volatility_breakout.py
 from __future__ import annotations
 
 from collections import deque
 from typing import Any
-import numpy as np
 
 from src.core.constants import SignalType
 from src.core.events import MarketDataEvent, SignalEvent

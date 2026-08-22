@@ -1,13 +1,12 @@
 # tests/strategies/test_strategy_registry.py
-from datetime import datetime
+from datetime import UTC, datetime
+
 import pytest
 
 from src.core.constants import SignalType
 from src.core.events import MarketDataEvent, SignalEvent
 from src.strategies.base_strategy import BaseStrategy, ParameterDefinition, StrategyMetadata
 from src.strategies.registry import StrategyRegistry
-from src.strategies.trend_following import TrendFollowingStrategy
-from src.strategies.volatility_breakout import VolatilityBreakoutStrategy
 
 
 class MockBreakoutStrategy(BaseStrategy):
@@ -74,7 +73,7 @@ class TestStrategyPolymorphism:
 
         for idx, p in enumerate(prices):
             bar = MarketDataEvent(
-                timestamp=datetime(2023, 1, idx + 1),
+                timestamp=datetime(2023, 1, idx + 1, tzinfo=UTC),
                 symbol="BTC-USD",
                 open=p,
                 high=p + 1.0,
@@ -96,7 +95,7 @@ class TestStrategyPolymorphism:
 
         for i in range(30):
             bar = MarketDataEvent(
-                timestamp=datetime(2023, 1, i + 1),
+                timestamp=datetime(2023, 1, i + 1, tzinfo=UTC),
                 symbol="BTC-USD",
                 open=100.0 + i,
                 high=102.0 + i,

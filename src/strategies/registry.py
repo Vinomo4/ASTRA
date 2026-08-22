@@ -1,17 +1,19 @@
 # src/strategies/registry.py
 from __future__ import annotations
 
-from typing import Any, Type
-from src.strategies.base_strategy import BaseStrategy, StrategyMetadata
+from typing import TYPE_CHECKING, ClassVar
+
+if TYPE_CHECKING:
+    from src.strategies.base_strategy import BaseStrategy, StrategyMetadata
 
 
 class StrategyRegistry:
     """Central registry for discovering and instantiating strategies."""
 
-    _registry: dict[str, Type[BaseStrategy]] = {}
+    _registry: ClassVar[dict[str, type[BaseStrategy]]] = {}
 
     @classmethod
-    def register(cls, strategy_cls: Type[BaseStrategy]) -> Type[BaseStrategy]:
+    def register(cls, strategy_cls: type[BaseStrategy]) -> type[BaseStrategy]:
         """Class decorator to register strategy implementations."""
         strategy_id = strategy_cls.id
         if not strategy_id:
@@ -23,7 +25,7 @@ class StrategyRegistry:
         return strategy_cls
 
     @classmethod
-    def get_strategy_class(cls, strategy_id: str) -> Type[BaseStrategy]:
+    def get_strategy_class(cls, strategy_id: str) -> type[BaseStrategy]:
         """Retrieves a strategy class by its registered ID."""
         if strategy_id not in cls._registry:
             available = list(cls._registry.keys())
@@ -33,15 +35,17 @@ class StrategyRegistry:
         return cls._registry[strategy_id]
 
     @classmethod
-    def create(cls, strategy_id: str, **params: Any) -> BaseStrategy:
-        """Instantiates a strategy with the provided parameters."""
-        strategy_cls = cls.get_strategy_class(strategy_id)
-        return strategy_cls(**params)
+    def create(cls, strategy_id: str, **kwargs) -> BaseStrategy:
+        if strategy_id not in cls._registry:
+            raise KeyError(
+                f"Strategy '{strategy_id}' not found in registry. "
+                f"Available strategies: {list(cls._registry.keys())}"
+            )
+        return cls._registry[strategy_id](**kwargs)
 
     @classmethod
     def list_strategies(cls) -> list[StrategyMetadata]:
-        """Returns metadata descriptors for all registered strategies for UI discovery."""
-        return [strategy_cls.get_metadata() for strategy_cls in cls._registry.values()]
+        return [strat_cls.get_metadata() for strat_cls in cls._registry.values()]
 
     @classmethod
     def clear(cls) -> None:
