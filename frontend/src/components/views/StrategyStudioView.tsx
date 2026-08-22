@@ -2,8 +2,6 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 import {
-  Coins,
-  Building2,
   Sliders,
   Dna,
   Save,
@@ -13,18 +11,14 @@ import {
   ArrowRight,
   Sparkles,
   CheckCircle2,
+  Info,
+  X,
+  FileText,
+  Shield,
+  Clock,
 } from 'lucide-react';
 import { useBacktest } from '../../context/BacktestContext';
-import type { StrategyRule } from '../../types/backtest';
-
-const ASSET_PRESETS = [
-  { symbol: 'AAPL', label: 'Apple Inc.', type: 'equity' },
-  { symbol: 'NVDA', label: 'NVIDIA Corp.', type: 'equity' },
-  { symbol: 'SPY', label: 'S&P 500 ETF', type: 'equity' },
-  { symbol: 'BTC-USD', label: 'Bitcoin (USD)', type: 'crypto' },
-  { symbol: 'ETH-USD', label: 'Ethereum (USD)', type: 'crypto' },
-  { symbol: 'SOL-USD', label: 'Solana (USD)', type: 'crypto' },
-];
+import type { StrategyMetadata, StrategyPreset, StrategyRule } from '../../types/backtest';
 
 const AVAILABLE_INDICATORS = [
   { value: 'close', label: 'Close Price' },
@@ -40,6 +34,11 @@ const AVAILABLE_INDICATORS = [
   { value: 'volume_ma', label: 'Volume MA' },
 ];
 
+type InfoModalTarget =
+  | { type: 'strategy'; data: StrategyMetadata }
+  | { type: 'preset'; data: StrategyPreset }
+  | null;
+
 export const StrategyStudioView: React.FC = () => {
   const {
     params,
@@ -49,8 +48,6 @@ export const StrategyStudioView: React.FC = () => {
     selectedPreset,
     applyPreset,
     reloadPresets,
-    selectAsset,
-    runSimulation,
     error,
   } = useBacktest();
 
@@ -58,6 +55,7 @@ export const StrategyStudioView: React.FC = () => {
   const [newPresetName, setNewPresetName] = useState('');
   const [presetDescription, setPresetDescription] = useState('');
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [infoTarget, setInfoTarget] = useState<InfoModalTarget>(null);
 
   const [entryRules, setEntryRules] = useState<StrategyRule[]>([
     { id: '1', indicator_a: 'close', operator: '>', indicator_b: 'ema_fast' },
@@ -67,6 +65,20 @@ export const StrategyStudioView: React.FC = () => {
   const [exitRules, setExitRules] = useState<StrategyRule[]>([
     { id: '1', indicator_a: 'close', operator: '<', indicator_b: 'ema_slow' },
   ]);
+
+  const handleSelectBaseStrategy = (strat: StrategyMetadata) => {
+    applyPreset('');
+    const defaults: Record<string, any> = {};
+    strat.parameters.forEach((p) => {
+      defaults[p.name] = p.default;
+    });
+
+    setParams((prev) => ({
+      ...prev,
+      strategy_id: strat.id,
+      strategy_params: defaults,
+    }));
+  };
 
   const handleAddEntryRule = () => {
     setEntryRules([
@@ -91,17 +103,15 @@ export const StrategyStudioView: React.FC = () => {
   };
 
   const handleApplyRulesToEngine = () => {
-    const updated = {
-      ...params,
+    setParams((prev) => ({
+      ...prev,
       strategy_id: 'custom_rule_strategy',
       strategy_params: {
-        ...params.strategy_params,
+        ...prev.strategy_params,
         entry_rules: entryRules,
         exit_rules: exitRules,
       },
-    };
-    setParams(updated);
-    runSimulation(updated);
+    }));
   };
 
   const handleSavePreset = async (e: React.FormEvent) => {
@@ -153,33 +163,13 @@ export const StrategyStudioView: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Asset Quick Selector */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900 border border-slate-800 p-3 rounded-xl">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs text-slate-400 font-semibold mr-1">Asset:</span>
-          {ASSET_PRESETS.map((preset) => (
-            <button
-              key={preset.symbol}
-              type="button"
-              onClick={() => selectAsset(preset.symbol)}
-              className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition flex items-center gap-1.5 ${
-                params.symbol === preset.symbol
-                  ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
-                  : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
-              }`}
-            >
-              {preset.type === 'crypto' ? <Coins size={13} /> : <Building2 size={13} />}
-              {preset.symbol}
-            </button>
-          ))}
-        </div>
-
-        {/* Studio Sub-Navigation */}
-        <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800 text-xs">
+      {/* Studio Sub-Navigation */}
+      <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
           <button
             type="button"
             onClick={() => setActiveSubTab('catalog')}
-            className={`px-3 py-1.5 rounded-md font-semibold transition ${
+            className={`px-3.5 py-1.5 rounded-lg font-semibold transition ${
               activeSubTab === 'catalog' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'
             }`}
           >
@@ -188,7 +178,7 @@ export const StrategyStudioView: React.FC = () => {
           <button
             type="button"
             onClick={() => setActiveSubTab('builder')}
-            className={`px-3 py-1.5 rounded-md font-semibold transition flex items-center gap-1 ${
+            className={`px-3.5 py-1.5 rounded-lg font-semibold transition flex items-center gap-1 ${
               activeSubTab === 'builder' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'
             }`}
           >
@@ -197,12 +187,16 @@ export const StrategyStudioView: React.FC = () => {
           <button
             type="button"
             onClick={() => setActiveSubTab('frictions')}
-            className={`px-3 py-1.5 rounded-md font-semibold transition ${
+            className={`px-3.5 py-1.5 rounded-lg font-semibold transition ${
               activeSubTab === 'frictions' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'
             }`}
           >
             Frictions & Sizing
           </button>
+        </div>
+
+        <div className="text-xs text-slate-400">
+          Selected Model: <span className="text-emerald-400 font-bold font-mono">{selectedPreset || params.strategy_id}</span>
         </div>
       </div>
 
@@ -211,11 +205,11 @@ export const StrategyStudioView: React.FC = () => {
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-base font-bold text-white flex items-center gap-2">
-                <Layers className="text-emerald-400" size={18} /> Quantitative Strategy Catalog
+              <h2 className="text-sm font-bold text-white flex items-center gap-2">
+                <Layers className="text-emerald-400" size={16} /> Strategy Architectures & User Library
               </h2>
               <p className="text-xs text-slate-400 mt-0.5">
-                Clicking any strategy or preset instantly updates and executes the backtest model.
+                Click a card to select it, or click the info icon to inspect its mathematical definition and parameters.
               </p>
             </div>
 
@@ -225,16 +219,16 @@ export const StrategyStudioView: React.FC = () => {
                 setParams((p) => ({ ...p, strategy_id: 'custom_rule_strategy' }));
                 setActiveSubTab('builder');
               }}
-              className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition shadow-md"
+              className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition shadow-md"
             >
-              <Plus size={14} /> Create Custom Rules
+              <Plus size={14} /> New Custom Strategy
             </button>
           </div>
 
-          {/* Standard Templates */}
+          {/* Standard Base Templates */}
           <div>
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">
-              Standard Architectures
+              Standard Base Templates
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {strategies.map((strat) => {
@@ -242,12 +236,7 @@ export const StrategyStudioView: React.FC = () => {
                 return (
                   <div
                     key={strat.id}
-                    onClick={() => {
-                      applyPreset('');
-                      const updated = { ...params, strategy_id: strat.id };
-                      setParams(updated);
-                      runSimulation(updated);
-                    }}
+                    onClick={() => handleSelectBaseStrategy(strat)}
                     className={`p-5 rounded-xl border cursor-pointer transition flex flex-col justify-between ${
                       isSelected
                         ? 'bg-emerald-500/10 border-emerald-500 ring-1 ring-emerald-500 text-white'
@@ -257,9 +246,22 @@ export const StrategyStudioView: React.FC = () => {
                     <div>
                       <div className="flex items-center justify-between mb-2">
                         <span className="font-bold text-sm text-white">{strat.name}</span>
-                        <span className="text-[10px] uppercase font-semibold px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300">
-                          {strat.category}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            title="Inspect strategy parameters & formula"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setInfoTarget({ type: 'strategy', data: strat });
+                            }}
+                            className="p-1 rounded-md text-slate-400 hover:text-emerald-300 hover:bg-slate-800 transition"
+                          >
+                            <Info size={15} />
+                          </button>
+                          <span className="text-[10px] uppercase font-semibold px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300">
+                            {strat.category}
+                          </span>
+                        </div>
                       </div>
                       <p className="text-xs text-slate-400 leading-relaxed line-clamp-3">
                         {strat.description}
@@ -269,7 +271,7 @@ export const StrategyStudioView: React.FC = () => {
                     <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between text-xs">
                       <span className="text-slate-500 font-mono">{strat.parameters.length} Parameters</span>
                       <span className={`font-semibold flex items-center gap-1 ${isSelected ? 'text-emerald-400' : 'text-slate-400'}`}>
-                        {isSelected ? 'Active Model' : 'Select'} <ArrowRight size={12} />
+                        {isSelected ? 'Selected' : 'Select'} <ArrowRight size={12} />
                       </span>
                     </div>
                   </div>
@@ -281,13 +283,13 @@ export const StrategyStudioView: React.FC = () => {
           {/* Saved User Presets */}
           <div>
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">
-              Saved Strategy Profiles ({presets.length})
+              Custom Presets & Profiles ({presets.length})
             </h3>
             {presets.length === 0 ? (
               <div className="bg-slate-900 border border-slate-800 rounded-xl p-8 text-center text-slate-400">
-                <p className="text-sm">No custom strategy presets saved yet.</p>
+                <p className="text-sm">No custom strategy profiles saved yet.</p>
                 <p className="text-xs text-slate-500 mt-1">
-                  Tune any strategy and save it to build your personal quant repository.
+                  Design rules in the constructor and save them to build your portfolio.
                 </p>
               </div>
             ) : (
@@ -307,13 +309,27 @@ export const StrategyStudioView: React.FC = () => {
                       <div>
                         <div className="flex items-center justify-between mb-1.5">
                           <span className="font-bold text-sm text-white">{preset.preset_name}</span>
-                          <button
-                            type="button"
-                            onClick={(e) => handleDeletePreset(preset.preset_name, e)}
-                            className="text-slate-500 hover:text-rose-400 p-1"
-                          >
-                            <Trash2 size={14} />
-                          </button>
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              title="Inspect preset specifications"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setInfoTarget({ type: 'preset', data: preset });
+                              }}
+                              className="p-1 text-slate-400 hover:text-amber-300 hover:bg-slate-800 rounded transition"
+                            >
+                              <Info size={15} />
+                            </button>
+                            <button
+                              type="button"
+                              title="Delete preset"
+                              onClick={(e) => handleDeletePreset(preset.preset_name, e)}
+                              className="text-slate-500 hover:text-rose-400 p-1 rounded hover:bg-slate-800 transition"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
                         </div>
                         <span className="text-[10px] font-mono text-amber-400 bg-amber-950/60 px-2 py-0.5 rounded border border-amber-900/60">
                           Base: {preset.strategy_id}
@@ -345,19 +361,19 @@ export const StrategyStudioView: React.FC = () => {
             <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-800">
               <div>
                 <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                  <Sparkles className="text-indigo-400" size={16} /> Strategy Logic Builder
+                  <Sparkles className="text-indigo-400" size={16} /> Signal Condition Builder
                 </h3>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Build custom trigger conditions evaluated bar-by-bar during the backtest.
+                  Combine technical indicators and price levels into execution logic.
                 </p>
               </div>
 
               <button
                 type="button"
                 onClick={handleApplyRulesToEngine}
-                className="text-xs font-semibold px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition shadow-md"
+                className="text-xs font-semibold px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition shadow-md"
               >
-                Apply & Execute Rules
+                Apply Rules to Active State
               </button>
             </div>
 
@@ -365,7 +381,7 @@ export const StrategyStudioView: React.FC = () => {
             <div className="mb-6">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">
-                  Entry Trigger Rules (All must be TRUE to enter LONG)
+                  Entry Trigger Rules (All conditions must be satisfied to enter LONG)
                 </span>
                 <button
                   type="button"
@@ -568,14 +584,14 @@ export const StrategyStudioView: React.FC = () => {
           {/* Preset Save Form */}
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
             <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
-              <Save size={15} className="text-amber-400" /> Save Current Architecture as Custom Strategy
+              <Save size={15} className="text-amber-400" /> Save Logic as Persistent Preset
             </h3>
             <form onSubmit={handleSavePreset} className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div>
                 <label className="block text-xs text-slate-400 mb-1">Preset Name</label>
                 <input
                   type="text"
-                  placeholder="e.g. BTC Trend+RSI Filter"
+                  placeholder="e.g. BTC Breakout+RSI Filter"
                   required
                   value={newPresetName}
                   onChange={(e) => setNewPresetName(e.target.value)}
@@ -587,7 +603,7 @@ export const StrategyStudioView: React.FC = () => {
                 <label className="block text-xs text-slate-400 mb-1">Description</label>
                 <input
                   type="text"
-                  placeholder="e.g. Enters when above EMA20 with RSI under 70"
+                  placeholder="e.g. Filtered breakout using RSI"
                   value={presetDescription}
                   onChange={(e) => setPresetDescription(e.target.value)}
                   className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none"
@@ -599,7 +615,7 @@ export const StrategyStudioView: React.FC = () => {
                   type="submit"
                   className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-4 py-2 rounded-lg text-xs transition"
                 >
-                  Save to Catalog
+                  Save Preset
                 </button>
                 {saveSuccess && (
                   <span className="text-xs text-emerald-400 flex items-center gap-1 font-semibold">
@@ -714,6 +730,139 @@ export const StrategyStudioView: React.FC = () => {
       )}
 
       {error && <p className="text-rose-400 text-xs font-mono bg-rose-950/40 p-3 rounded-lg border border-rose-900">{error}</p>}
+
+      {/* STRATEGY & PRESET SPECIFICATION MODAL */}
+      {infoTarget && (
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-2xl w-full p-6 shadow-2xl flex flex-col max-h-[85vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800 mb-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-bold text-white">
+                    {infoTarget.type === 'strategy' ? infoTarget.data.name : infoTarget.data.preset_name}
+                  </h3>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 border border-emerald-800 text-emerald-400 uppercase">
+                    {infoTarget.type === 'strategy' ? infoTarget.data.category : `Preset: ${infoTarget.data.strategy_id}`}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 mt-0.5 font-mono">
+                  ID: {infoTarget.type === 'strategy' ? infoTarget.data.id : infoTarget.data.preset_name}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setInfoTarget(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Description Block */}
+            <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 mb-4">
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 mb-1.5">
+                <FileText size={13} className="text-indigo-400" /> Mathematical & Behavioral Thesis
+              </span>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                {infoTarget.type === 'strategy'
+                  ? infoTarget.data.description
+                  : infoTarget.data.description || 'No custom notes provided for this preset profile.'}
+              </p>
+            </div>
+
+            {/* Parameters Breakdown Table (Base Strategy) */}
+            {infoTarget.type === 'strategy' && (
+              <div>
+                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 mb-2.5">
+                  <Sliders size={13} className="text-emerald-400" /> Parameter Schema Definitions
+                </span>
+                <div className="overflow-x-auto border border-slate-800 rounded-xl">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-950 text-slate-400 uppercase text-[11px] font-semibold border-b border-slate-800">
+                      <tr>
+                        <th className="p-2.5">Parameter</th>
+                        <th className="p-2.5">Type</th>
+                        <th className="p-2.5">Default</th>
+                        <th className="p-2.5">Range</th>
+                        <th className="p-2.5">Description</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800 text-slate-300 font-mono">
+                      {infoTarget.data.parameters.map((p) => (
+                        <tr key={p.name} className="hover:bg-slate-800/30">
+                          <td className="p-2.5 font-sans font-semibold text-white">{p.label}</td>
+                          <td className="p-2.5 text-indigo-400">{p.param_type}</td>
+                          <td className="p-2.5 text-emerald-400">{String(p.default)}</td>
+                          <td className="p-2.5 text-slate-400">
+                            {p.min_value !== undefined ? `${p.min_value} - ${p.max_value}` : '—'}
+                          </td>
+                          <td className="p-2.5 font-sans text-slate-400">{p.description}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Preset Specifications Breakdown */}
+            {infoTarget.type === 'preset' && (
+              <div className="space-y-4">
+                {/* Custom AST Rules (if defined) */}
+                {infoTarget.data.strategy_params.entry_rules && (
+                  <div>
+                    <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider block mb-2">
+                      Configured Entry Rules (All must be TRUE)
+                    </span>
+                    <div className="space-y-1.5 font-mono text-xs">
+                      {infoTarget.data.strategy_params.entry_rules.map((r: any, idx: number) => (
+                        <div key={idx} className="bg-slate-950 px-3 py-2 rounded-lg border border-slate-800 text-slate-300">
+                          #{idx + 1}: <span className="text-emerald-400">{r.indicator_a}</span> {r.operator}{' '}
+                          <span className="text-indigo-300">{r.threshold !== undefined ? r.threshold : r.indicator_b}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Risk & Friction Profile */}
+                <div>
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 mb-2">
+                    <Shield size={13} className="text-rose-400" /> Embedded Risk & Cost Parameters
+                  </span>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 font-mono text-xs">
+                    <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+                      <span className="text-[10px] text-slate-500 font-sans block">Risk Fraction</span>
+                      <span className="text-white font-bold">{(infoTarget.data.risk_fraction * 100).toFixed(1)}%</span>
+                    </div>
+                    <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+                      <span className="text-[10px] text-slate-500 font-sans block">SL Multiplier</span>
+                      <span className="text-rose-400 font-bold">{infoTarget.data.atr_multiplier_sl}x ATR</span>
+                    </div>
+                    <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+                      <span className="text-[10px] text-slate-500 font-sans block">TP Multiplier</span>
+                      <span className="text-emerald-400 font-bold">{infoTarget.data.atr_multiplier_tp}x ATR</span>
+                    </div>
+                    <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+                      <span className="text-[10px] text-slate-500 font-sans block">Commissions</span>
+                      <span className="text-amber-400 font-bold">{infoTarget.data.commission_bps} bps</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Timestamp */}
+                {infoTarget.data.updated_at && (
+                  <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-mono pt-2">
+                    <Clock size={12} /> Last updated: {infoTarget.data.updated_at}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

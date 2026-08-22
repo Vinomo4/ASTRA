@@ -5,6 +5,16 @@ import type { BacktestParams, BacktestResult, StrategyMetadata, StrategyPreset }
 
 export type WorkspaceTab = 'studio' | 'performance' | 'stress_testing' | 'validation' | 'comparison';
 
+export const getDefaultDateRange = (years: number = 2) => {
+  const end = new Date();
+  const start = new Date();
+  start.setFullYear(end.getFullYear() - years);
+  return {
+    start_date: start.toISOString().split('T')[0],
+    end_date: end.toISOString().split('T')[0],
+  };
+};
+
 interface BacktestContextType {
   activeTab: WorkspaceTab;
   setActiveTab: (tab: WorkspaceTab) => void;
@@ -33,10 +43,12 @@ export const BacktestProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [presets, setPresets] = useState<StrategyPreset[]>([]);
   const [selectedPreset, setSelectedPreset] = useState<string>('');
 
+  const defaultDates = getDefaultDateRange(2);
+
   const [params, setParams] = useState<BacktestParams>({
     symbol: 'BTC-USD',
-    start_date: '2023-01-01',
-    end_date: '2024-01-01',
+    start_date: defaultDates.start_date,
+    end_date: defaultDates.end_date,
     initial_capital: 100000,
     strategy_id: 'regime_volatility_breakout',
     strategy_params: {
@@ -107,9 +119,7 @@ export const BacktestProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, [loadMetadata]);
 
   const selectAsset = (symbol: string) => {
-    const updated = { ...params, symbol };
-    setParams(updated);
-    runSimulation(updated);
+    setParams((prev) => ({ ...prev, symbol }));
   };
 
   const applyPreset = (presetName: string) => {
@@ -119,8 +129,9 @@ export const BacktestProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const p = presets.find((item) => item.preset_name === presetName);
     if (!p) return;
 
-    const updated: BacktestParams = {
-      ...params,
+    // Update state parameters only without running simulation
+    setParams((prev) => ({
+      ...prev,
       strategy_id: p.strategy_id,
       strategy_params: { ...p.strategy_params },
       risk_fraction: p.risk_fraction,
@@ -130,9 +141,7 @@ export const BacktestProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       commission_fixed: p.commission_fixed,
       slippage_bps: p.slippage_bps,
       gap_slippage_enabled: p.gap_slippage_enabled,
-    };
-    setParams(updated);
-    runSimulation(updated);
+    }));
   };
 
   return (
