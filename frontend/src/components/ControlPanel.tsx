@@ -1,7 +1,7 @@
 // src/components/ControlPanel.tsx
-import React, { memo, useState } from 'react';
-import { Play, Coins, Building2, Sliders, Dna, ChevronDown, ChevronUp } from 'lucide-react';
-import type { BacktestParams } from '../types/backtest';
+import React, { memo, useState, useEffect } from 'react';
+import { Play, Coins, Building2, Sliders, Dna, ChevronDown, ChevronUp, Layers } from 'lucide-react';
+import type { BacktestParams, StrategyMetadata } from '../types/backtest';
 
 const ASSET_PRESETS = [
   { symbol: 'AAPL', label: 'Apple Inc.', type: 'equity' },
@@ -10,6 +10,34 @@ const ASSET_PRESETS = [
   { symbol: 'BTC-USD', label: 'Bitcoin (USD)', type: 'crypto' },
   { symbol: 'ETH-USD', label: 'Ethereum (USD)', type: 'crypto' },
   { symbol: 'SOL-USD', label: 'Solana (USD)', type: 'crypto' },
+];
+
+const DEFAULT_STRATEGIES: StrategyMetadata[] = [
+  {
+    id: 'regime_volatility_breakout',
+    name: 'Regime-Filtered Volatility Breakout',
+    description: 'Donchian channel breakout filtered by ADX and volume expansion.',
+    category: 'Rule-Based',
+    parameters: [
+      { name: 'channel_period', label: 'Donchian Channel Period', param_type: 'int', default: 20, min_value: 5, max_value: 100, step: 1, description: 'Lookback window' },
+      { name: 'adx_period', label: 'ADX Period', param_type: 'int', default: 14, min_value: 5, max_value: 50, step: 1, description: 'ADX calculation window' },
+      { name: 'adx_threshold', label: 'ADX Threshold', param_type: 'float', default: 25.0, min_value: 10.0, max_value: 50.0, step: 1.0, description: 'Trend strength filter' },
+      { name: 'volume_ma_period', label: 'Volume MA Lookback', param_type: 'int', default: 20, min_value: 5, max_value: 100, step: 1, description: 'Baseline volume window' },
+      { name: 'volume_multiplier', label: 'Volume Expansion Factor', param_type: 'float', default: 1.2, min_value: 0.5, max_value: 3.0, step: 0.1, description: 'Relative volume threshold' },
+      { name: 'atr_period', label: 'ATR Period', param_type: 'int', default: 14, min_value: 5, max_value: 50, step: 1, description: 'Volatility sizing period' },
+    ],
+  },
+  {
+    id: 'trend_following_ema',
+    name: 'EMA Trend Following',
+    description: 'Fast/Slow Exponential Moving Average crossover system.',
+    category: 'Rule-Based',
+    parameters: [
+      { name: 'fast_ema', label: 'Fast EMA Period', param_type: 'int', default: 20, min_value: 3, max_value: 100, step: 1, description: 'Fast EMA window' },
+      { name: 'slow_ema', label: 'Slow EMA Period', param_type: 'int', default: 50, min_value: 10, max_value: 300, step: 1, description: 'Slow EMA window' },
+      { name: 'atr_period', label: 'ATR Period', param_type: 'int', default: 14, min_value: 5, max_value: 50, step: 1, description: 'Volatility sizing period' },
+    ],
+  },
 ];
 
 interface ControlPanelProps {
@@ -23,9 +51,67 @@ interface ControlPanelProps {
 export const ControlPanel = memo(({ params, setParams, onSubmit, loading, error }: ControlPanelProps) => {
   const [showFrictions, setShowFrictions] = useState(false);
   const [showMonteCarlo, setShowMonteCarlo] = useState(false);
+  const [strategies, setStrategies] = useState<StrategyMetadata[]>(DEFAULT_STRATEGIES);
+
+  useEffect(() => {
+    fetch('http://127.0.0.1:8000/api/backtest/strategies')
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        return res.json();
+      })
+      .then((data) => {
+        if (data.strategies && Array.isArray(data.strategies) && data.strategies.length > 0) {
+          setStrategies(data.strategies);
+
+          const currentValid = data.strategies.some((s: StrategyMetadata) => s.id === params.strategy_id);
+          if (!params.strategy_id || !currentValid) {
+            const first = data.strategies[0];
+            const defaults: Record<string, any> = {};
+            first.parameters.forEach((p: any) => {
+              defaults[p.name] = p.default;
+            });
+            setParams((prev) => ({
+              ...prev,
+              strategy_id: first.id,
+              strategy_params: defaults,
+            }));
+          }
+        }
+      })
+      .catch((err) => console.warn('Using default fallback strategies:', err));
+  }, []);
+
+  const activeStrategy = strategies.find((s) => s.id === params.strategy_id) || strategies[0] || DEFAULT_STRATEGIES[0];
+
+  const handleStrategyChange = (strategyId: string) => {
+    const selected = strategies.find((s) => s.id === strategyId);
+    if (!selected) return;
+
+    const defaults: Record<string, any> = {};
+    selected.parameters.forEach((p) => {
+      defaults[p.name] = p.default;
+    });
+
+    setParams((prev) => ({
+      ...prev,
+      strategy_id: selected.id,
+      strategy_params: defaults,
+    }));
+  };
+
+  const handleParamChange = (name: string, value: any) => {
+    setParams((prev) => ({
+      ...prev,
+      strategy_params: {
+        ...(prev.strategy_params || {}),
+        [name]: value,
+      },
+    }));
+  };
 
   return (
     <>
+      {/* Asset Quick Selector */}
       <div className="flex flex-wrap gap-2 mb-4">
         {ASSET_PRESETS.map((preset) => (
           <button
@@ -46,12 +132,30 @@ export const ControlPanel = memo(({ params, setParams, onSubmit, loading, error 
 
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 mb-8 shadow-sm">
         <form onSubmit={onSubmit}>
-          <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-9 gap-3 mb-4">
+          {/* Row 1: Strategy Selector & Core Market Setup */}
+          <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-5 gap-3 mb-4 pb-4 border-b border-slate-800">
+            <div>
+              <label className="block text-xs font-semibold text-emerald-400 mb-1 flex items-center gap-1">
+                <Layers size={13} /> Strategy Engine
+              </label>
+              <select
+                value={params.strategy_id || activeStrategy?.id}
+                onChange={(e) => handleStrategyChange(e.target.value)}
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500"
+              >
+                {strategies.map((strat) => (
+                  <option key={strat.id} value={strat.id} className="bg-slate-900 text-white py-1">
+                    {strat.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <div>
               <label className="block text-xs font-semibold text-slate-400 mb-1">Asset Symbol</label>
-              <input 
-                type="text" 
-                value={params.symbol} 
+              <input
+                type="text"
+                value={params.symbol}
                 onChange={(e) => setParams({ ...params, symbol: e.target.value.toUpperCase() })}
                 className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500"
               />
@@ -59,9 +163,9 @@ export const ControlPanel = memo(({ params, setParams, onSubmit, loading, error 
 
             <div>
               <label className="block text-xs font-semibold text-slate-400 mb-1">Start Date</label>
-              <input 
-                type="date" 
-                value={params.start_date} 
+              <input
+                type="date"
+                value={params.start_date}
                 onChange={(e) => setParams({ ...params, start_date: e.target.value })}
                 className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
               />
@@ -69,9 +173,9 @@ export const ControlPanel = memo(({ params, setParams, onSubmit, loading, error 
 
             <div>
               <label className="block text-xs font-semibold text-slate-400 mb-1">End Date</label>
-              <input 
-                type="date" 
-                value={params.end_date} 
+              <input
+                type="date"
+                value={params.end_date}
                 onChange={(e) => setParams({ ...params, end_date: e.target.value })}
                 className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
               />
@@ -79,40 +183,48 @@ export const ControlPanel = memo(({ params, setParams, onSubmit, loading, error 
 
             <div>
               <label className="block text-xs font-semibold text-slate-400 mb-1">Capital ($)</label>
-              <input 
-                type="number" 
-                value={params.initial_capital} 
+              <input
+                type="number"
+                value={params.initial_capital}
                 onChange={(e) => setParams({ ...params, initial_capital: Number(e.target.value) })}
                 className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
               />
             </div>
+          </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-400 mb-1">Fast EMA</label>
-              <input 
-                type="number" 
-                value={params.fast_ema} 
-                onChange={(e) => setParams({ ...params, fast_ema: Number(e.target.value) })}
-                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-400 mb-1">Slow EMA</label>
-              <input 
-                type="number" 
-                value={params.slow_ema} 
-                onChange={(e) => setParams({ ...params, slow_ema: Number(e.target.value) })}
-                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
-              />
-            </div>
+          {/* Row 2: Dynamic Strategy Parameters + Risk Bounds + Run Button */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 mb-4">
+            {activeStrategy?.parameters.map((p) => {
+              const val = params.strategy_params?.[p.name] ?? p.default;
+              return (
+                <div key={p.name}>
+                  <label className="block text-xs font-semibold text-indigo-300 mb-1 truncate" title={p.label}>
+                    {p.label}
+                  </label>
+                  <input
+                    type="number"
+                    step={p.step || (p.param_type === 'int' ? 1 : 0.1)}
+                    min={p.min_value}
+                    max={p.max_value}
+                    value={val}
+                    onChange={(e) =>
+                      handleParamChange(
+                        p.name,
+                        p.param_type === 'int' ? parseInt(e.target.value) || 0 : parseFloat(e.target.value) || 0
+                      )
+                    }
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+              );
+            })}
 
             <div>
               <label className="block text-xs font-semibold text-rose-400 mb-1">SL ATR (x)</label>
-              <input 
-                type="number" 
-                step="0.1" 
-                value={params.atr_multiplier_sl} 
+              <input
+                type="number"
+                step="0.1"
+                value={params.atr_multiplier_sl}
                 onChange={(e) => setParams({ ...params, atr_multiplier_sl: Number(e.target.value) })}
                 className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-rose-500"
               />
@@ -120,27 +232,27 @@ export const ControlPanel = memo(({ params, setParams, onSubmit, loading, error 
 
             <div>
               <label className="block text-xs font-semibold text-emerald-400 mb-1">TP ATR (x)</label>
-              <input 
-                type="number" 
-                step="0.1" 
-                value={params.atr_multiplier_tp} 
+              <input
+                type="number"
+                step="0.1"
+                value={params.atr_multiplier_tp}
                 onChange={(e) => setParams({ ...params, atr_multiplier_tp: Number(e.target.value) })}
                 className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500"
               />
             </div>
 
             <div className="flex items-end">
-              <button 
-                type="submit" 
+              <button
+                type="submit"
                 disabled={loading}
-                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-medium py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 transition disabled:opacity-50 text-sm"
+                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2 px-4 rounded-lg flex items-center justify-center gap-1.5 transition disabled:opacity-50 text-sm shadow-md"
               >
-                <Play size={15} /> {loading ? 'Simulating...' : 'Run'}
+                <Play size={15} /> {loading ? 'Simulating...' : 'Run Simulation'}
               </button>
             </div>
           </div>
 
-          {/* Collapsible Toolbars */}
+          {/* Sub-Panel Accordion Toggles */}
           <div className="border-t border-slate-800 pt-3 flex flex-wrap items-center gap-6">
             <button
               type="button"

@@ -159,16 +159,22 @@ export const MonteCarloPanel = memo(({ monteCarlo }: MonteCarloPanelProps) => {
                     tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`}
                   />
                   <Tooltip
-                    contentStyle={{ backgroundColor: '#020617', borderColor: '#334155', borderRadius: '8px' }}
-                    itemStyle={{ fontSize: '12px' }}
-                    labelFormatter={(step) => `Trade Step ${step}`}
-                    formatter={(_val: any, name: string, item: any) => {
-                      if (name === 'median') return [`$${item.payload.median.toLocaleString()}`, 'Median Equity'];
-                      if (name === 'p95_diff') return [`$${item.payload.raw_p95.toLocaleString()}`, '95th Percentile'];
-                      if (name === 'p75_diff') return [`$${item.payload.raw_p75.toLocaleString()}`, '75th Percentile'];
-                      if (name === 'p25_diff') return [`$${item.payload.raw_p25.toLocaleString()}`, '25th Percentile'];
-                      if (name === 'p5') return [`$${item.payload.raw_p5.toLocaleString()}`, '5th Percentile'];
-                      return null;
+                    contentStyle={{
+                      backgroundColor: '#0f172a',
+                      borderColor: '#334155',
+                      borderRadius: '0.5rem',
+                      fontSize: '0.75rem',
+                    }}
+                    formatter={(val: any, name: any) => {
+                      const formattedVal = typeof val === 'number' ? `$${val.toLocaleString()}` : String(val);
+                      const labelMap: Record<string, string> = {
+                        p95: '95th Percentile (P95)',
+                        p75: '75th Percentile (P75)',
+                        p50: 'Median Trajectory (P50)',
+                        p25: '25th Percentile (P25)',
+                        p5: '5th Percentile (P5)',
+                      };
+                      return [formattedVal, labelMap[String(name)] || String(name)];
                     }}
                   />
 

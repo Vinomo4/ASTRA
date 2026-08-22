@@ -1,7 +1,32 @@
 # src/api/schemas/backtest_schemas.py
 from __future__ import annotations
+
 from typing import Any, List, Optional
 from pydantic import BaseModel, Field
+
+
+class ParameterDefinition(BaseModel):
+    name: str
+    label: str
+    param_type: str  # "int" | "float" | "bool" | "str" | "select"
+    default: Any
+    min_value: Optional[float] = None
+    max_value: Optional[float] = None
+    step: Optional[float] = None
+    options: Optional[List[str]] = None
+    description: str = ""
+
+
+class StrategyMetadata(BaseModel):
+    id: str
+    name: str
+    description: str
+    category: str = "Rule-Based"  # "Rule-Based" | "ML-Enhanced" | "Statistical"
+    parameters: List[ParameterDefinition] = Field(default_factory=list)
+
+
+class StrategyListResponse(BaseModel):
+    strategies: List[StrategyMetadata]
 
 
 class SimulationBandPoint(BaseModel):
@@ -34,8 +59,22 @@ class BacktestRequest(BaseModel):
     start_date: str
     end_date: str
     initial_capital: float = Field(default=100000.0, gt=0)
-    fast_ema: int = Field(default=20, gt=0)
-    slow_ema: int = Field(default=50, gt=0)
+
+    # Dynamic Strategy Selection
+    strategy_id: str = Field(
+        default="trend_following_ema",
+        description="Identifier of the strategy registered in StrategyRegistry",
+    )
+    strategy_params: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Dynamic key-value map matching the strategy's ParameterDefinition schema",
+    )
+
+    # Legacy direct parameters for backward compatibility
+    fast_ema: Optional[int] = Field(default=20, gt=0)
+    slow_ema: Optional[int] = Field(default=50, gt=0)
+
+    # Risk Management Parameters
     risk_fraction: float = Field(default=0.01, gt=0, le=1.0)
     atr_multiplier_sl: float = Field(default=2.0, gt=0.0)
     atr_multiplier_tp: float = Field(default=4.0, gt=0.0)
@@ -48,7 +87,10 @@ class BacktestRequest(BaseModel):
 
     # Monte Carlo Parameters
     num_simulations: int = Field(
-        default=1_000, ge=100, le=10_000, description="Number of bootstrap resample iterations"
+        default=1_000,
+        ge=100,
+        le=10_000,
+        description="Number of bootstrap resample iterations",
     )
     ruin_threshold_pct: float = Field(
         default=30.0,

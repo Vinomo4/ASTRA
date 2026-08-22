@@ -1,5 +1,31 @@
 // src/types/backtest.ts
 
+export type ActiveTab = 'studio' | 'performance' | 'validation' | 'comparison';
+
+export interface ParameterDefinition {
+  name: string;
+  label: string;
+  param_type: 'int' | 'float' | 'bool' | 'str' | 'select';
+  default: any;
+  min_value?: number;
+  max_value?: number;
+  step?: number;
+  options?: string[];
+  description: string;
+}
+
+export interface StrategyMetadata {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  parameters: ParameterDefinition[];
+}
+
+export interface StrategyListResponse {
+  strategies: StrategyMetadata[];
+}
+
 export interface SimulationBandPoint {
   trade_step: number;
   p5: number;
@@ -30,19 +56,21 @@ export interface BacktestParams {
   start_date: string;
   end_date: string;
   initial_capital: number;
-  fast_ema: number;
-  slow_ema: number;
+
+  strategy_id: string;
+  strategy_params: Record<string, any>;
+
+  fast_ema?: number;
+  slow_ema?: number;
   risk_fraction: number;
   atr_multiplier_sl: number;
   atr_multiplier_tp: number;
-  
-  // Market Friction Parameters
+
   commission_bps: number;
   commission_fixed: number;
   slippage_bps: number;
   gap_slippage_enabled: boolean;
 
-  // Monte Carlo Configurations
   num_simulations?: number;
   ruin_threshold_pct?: number;
 }
@@ -70,6 +98,11 @@ export interface BenchmarkPoint {
   time: string;
   equity: number;
   return_pct: number;
+}
+
+export interface EquityPoint {
+  time: string;
+  value: number;
 }
 
 export interface ExecutionMarker {
@@ -151,10 +184,13 @@ export interface BacktestResult {
   active_position: ActivePosition | null;
   execution_markers: ExecutionMarker[];
   ohlc_history: OHLCPoint[];
+  equity_curve: EquityPoint[];
   benchmark_curve: BenchmarkPoint[];
   snapshots: PortfolioSnapshot[];
   trades: TradeItem[];
 }
+
+export type BacktestResponse = BacktestResult;
 
 export interface UnifiedDataPoint {
   time: string;

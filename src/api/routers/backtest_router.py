@@ -18,15 +18,22 @@ from src.api.schemas.backtest_schemas import (
     OHLCPoint,
     PortfolioSnapshot,
     SimulationBandPoint,
+    StrategyListResponse,
     TradeAnalytics,
     TradeItem,
 )
 from src.backtester.event_engine import BacktestEngine
 from src.data_engine.storage_manager import StorageManager
 from src.data_engine.yfinance_loader import YFinanceLoader
-from src.strategies.trend_following import TrendFollowingStrategy
+from src.strategies import StrategyRegistry
 
 router = APIRouter(prefix="/api/backtest", tags=["Backtest"])
+
+
+@router.get("/strategies", response_model=StrategyListResponse)
+async def list_available_strategies() -> StrategyListResponse:
+    """Returns metadata schemas and descriptions for all registered quantitative strategies."""
+    return StrategyListResponse(strategies=StrategyRegistry.list_strategies())
 
 
 @router.post("/run", response_model=BacktestResponse)
@@ -51,8 +58,23 @@ async def run_backtest(req: BacktestRequest) -> BacktestResponse:
             detail=f"No market data found for symbol {req.symbol} in the requested range.",
         )
 
-    # 2. Run Backtest WITH Friction Parameters Forwarded
-    strategy = TrendFollowingStrategy(fast_ema=req.fast_ema, slow_ema=req.slow_ema)
+    # 2. Polymorphic Strategy Instantiation
+    strategy_params = dict(req.strategy_params)
+
+    # Backward compatibility fallback for legacy requests
+    if "fast_ema" not in strategy_params and req.fast_ema is not None:
+        strategy_params["fast_ema"] = req.fast_ema
+    if "slow_ema" not in strategy_params and req.slow_ema is not None:
+        strategy_params["slow_ema"] = req.slow_ema
+
+    try:
+        strategy = StrategyRegistry.create(req.strategy_id, **strategy_params)
+    except KeyError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=f"Invalid strategy parameters: {exc}") from exc
+
+    # 3. Run Backtest with Market Frictions & Selected Strategy
     engine = BacktestEngine(
         strategy=strategy,
         initial_capital=req.initial_capital,
@@ -67,7 +89,7 @@ async def run_backtest(req: BacktestRequest) -> BacktestResponse:
 
     results = engine.run(df)
 
-    # 3. Compute Benchmark Curve (Buy & Hold of Base Asset)
+    # 4. Compute Benchmark Curve (Buy & Hold of Base Asset)
     sorted_df = df.sort_values("timestamp").reset_index(drop=True)
     initial_close = float(sorted_df.iloc[0]["close"])
     benchmark_shares = req.initial_capital / initial_close
@@ -86,7 +108,7 @@ async def run_backtest(req: BacktestRequest) -> BacktestResponse:
 
     trade_stats = PerformanceAnalytics.calculate_trade_statistics(engine.trades)
 
-    # 4. Monte Carlo Resilience & Stress Testing
+    # 5. Monte Carlo Resilience & Stress Testing
     mc_simulator = MonteCarloSimulator(
         num_simulations=req.num_simulations,
         ruin_threshold_pct=req.ruin_threshold_pct,
@@ -148,7 +170,7 @@ async def run_backtest(req: BacktestRequest) -> BacktestResponse:
         ActivePosition(**results["active_position"]) if results["active_position"] else None
     )
 
-    # 5. Map Trade Audit Records Including All Friction Metrics
+    # 6. Map Trade Audit Records Including Friction Costs
     trade_items = [
         TradeItem(
             trade_id=t.trade_id,

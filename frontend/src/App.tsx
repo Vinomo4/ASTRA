@@ -35,19 +35,32 @@ export default function App() {
     start_date: '2023-01-01',
     end_date: '2024-01-01',
     initial_capital: 100000,
+    
+    // Dynamic Strategy Configurations
+    strategy_id: 'regime_volatility_breakout',
+    strategy_params: {
+      channel_period: 20,
+      adx_period: 14,
+      adx_threshold: 25.0,
+      volume_ma_period: 20,
+      volume_multiplier: 1.2,
+      atr_period: 14,
+    },
+
+    // Legacy Fallbacks & Global Risk
     fast_ema: 20,
     slow_ema: 50,
     risk_fraction: 0.01,
     atr_multiplier_sl: 2.0,
     atr_multiplier_tp: 4.0,
     
-    // Default Market Frictions
+    // Market Frictions
     commission_bps: 5.0,
     commission_fixed: 0.0,
     slippage_bps: 2.0,
     gap_slippage_enabled: true,
 
-    // Monte Carlo Defaults
+    // Monte Carlo Stress Testing
     num_simulations: 1000,
     ruin_threshold_pct: 30.0,
   });
@@ -286,7 +299,6 @@ export default function App() {
                         }}
                       />
                     )}
-
                     {results.execution_markers.map((marker, idx) => (
                       <ReferenceDot
                         key={`${marker.time}-${idx}-${marker.side}`}
@@ -294,7 +306,6 @@ export default function App() {
                         x={marker.time}
                         y={marker.price}
                         shape={(props) => <ExecutionMarkerShape {...props} marker={marker} />}
-                        isFront
                       />
                     ))}
                   </ComposedChart>
@@ -375,7 +386,7 @@ export default function App() {
           />
 
           {/* Monte Carlo Resilience & Tail Risk Model */}
-          <MonteCarloPanel monteCarlo={results.monte_carlo} />
+          {results.monte_carlo && <MonteCarloPanel monteCarlo={results.monte_carlo} />}
 
           <TradeAuditTable trades={results.trades} />
         </>
