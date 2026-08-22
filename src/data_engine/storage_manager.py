@@ -1,28 +1,25 @@
+# src/data_engine/storage_manager.py
 from __future__ import annotations
 
+import json
 from pathlib import Path
-
+from typing import Any
 import duckdb
 import pandas as pd
 
-from src.core.config import settings
-
 
 class StorageManager:
-    def __init__(self, db_path: str = settings.duckdb_path) -> None:
-        self.db_path = Path(db_path)
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+    def __init__(self, db_path: str = "data/market_database.duckdb") -> None:
+        self.db_path = db_path
+        Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
         self._init_db()
 
-    def _get_connection(self) -> duckdb.DuckDBPyConnection:
-        return duckdb.connect(str(self.db_path))
-
     def _init_db(self) -> None:
-        with self._get_connection() as conn:
+        with duckdb.connect(self.db_path) as conn:
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS ohlcv (
-                    timestamp TIMESTAMPTZ,
+                    timestamp TIMESTAMP,
                     symbol VARCHAR,
                     open DOUBLE,
                     high DOUBLE,
@@ -30,27 +27,161 @@ class StorageManager:
                     close DOUBLE,
                     volume DOUBLE,
                     PRIMARY KEY (timestamp, symbol)
-                );
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS strategy_presets (
+                    preset_name VARCHAR PRIMARY KEY,
+                    strategy_id VARCHAR NOT NULL,
+                    strategy_params VARCHAR NOT NULL,
+                    risk_fraction DOUBLE NOT NULL,
+                    atr_multiplier_sl DOUBLE NOT NULL,
+                    atr_multiplier_tp DOUBLE NOT NULL,
+                    commission_bps DOUBLE NOT NULL,
+                    commission_fixed DOUBLE NOT NULL,
+                    slippage_bps DOUBLE NOT NULL,
+                    gap_slippage_enabled BOOLEAN NOT NULL,
+                    description VARCHAR,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
                 """
             )
 
     def save_ohlcv(self, df: pd.DataFrame) -> None:
-        with self._get_connection() as conn:
-            conn.register("incoming_df", df)
+        if df.empty:
+            return
+        data = df.copy()
+        data["timestamp"] = pd.to_datetime(data["timestamp"])
+        with duckdb.connect(self.db_path) as conn:
             conn.execute(
                 """
                 INSERT OR REPLACE INTO ohlcv
-                SELECT timestamp, symbol, open, high, low, close, volume
-                FROM incoming_df
+                SELECT timestamp, symbol, open, high, low, close, volume FROM data
                 """
             )
 
-    def load_ohlcv(self, symbol: str, start: str, end: str) -> pd.DataFrame:
-        with self._get_connection() as conn:
-            query = """
-                SELECT timestamp, symbol, open, high, low, close, volume
-                FROM ohlcv
-                WHERE symbol = ? AND timestamp >= ? AND timestamp <= ?
-                ORDER BY timestamp ASC
-            """
-            return conn.execute(query, [symbol, start, end]).df()
+    def load_ohlcv(self, symbol: str, start_date: str, end_date: str) -> pd.DataFrame:
+        query = """
+            SELECT timestamp, symbol, open, high, low, close, volume
+            FROM ohlcv
+            WHERE symbol = ?
+              AND timestamp >= ?
+              AND timestamp <= ?
+            ORDER BY timestamp ASC
+        """
+        with duckdb.connect(self.db_path) as conn:
+            return conn.execute(query, [symbol, start_date, end_date]).df()
+
+    # --- Strategy Preset CRUD Methods ---
+
+    def save_strategy_preset(
+        self,
+        preset_name: str,
+        strategy_id: str,
+        strategy_params: dict[str, Any],
+        risk_fraction: float,
+        atr_multiplier_sl: float,
+        atr_multiplier_tp: float,
+        commission_bps: float = 5.0,
+        commission_fixed: float = 0.0,
+        slippage_bps: float = 2.0,
+        gap_slippage_enabled: bool = True,
+        description: str = "",
+    ) -> dict[str, Any]:
+        params_json = json.dumps(strategy_params)
+        with duckdb.connect(self.db_path) as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO strategy_presets (
+                    preset_name, strategy_id, strategy_params,
+                    risk_fraction, atr_multiplier_sl, atr_multiplier_tp,
+                    commission_bps, commission_fixed, slippage_bps, gap_slippage_enabled,
+                    description, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                """,
+                [
+                    preset_name,
+                    strategy_id,
+                    params_json,
+                    risk_fraction,
+                    atr_multiplier_sl,
+                    atr_multiplier_tp,
+                    commission_bps,
+                    commission_fixed,
+                    slippage_bps,
+                    gap_slippage_enabled,
+                    description,
+                ],
+            )
+        return self.get_strategy_preset(preset_name)
+
+    def get_strategy_preset(self, preset_name: str) -> dict[str, Any] | None:
+        with duckdb.connect(self.db_path) as conn:
+            rel = conn.execute(
+                """
+                SELECT preset_name, strategy_id, strategy_params,
+                       risk_fraction, atr_multiplier_sl, atr_multiplier_tp,
+                       commission_bps, commission_fixed, slippage_bps, gap_slippage_enabled,
+                       description, updated_at
+                FROM strategy_presets
+                WHERE preset_name = ?
+                """,
+                [preset_name],
+            ).fetchone()
+
+        if not rel:
+            return None
+
+        return {
+            "preset_name": rel[0],
+            "strategy_id": rel[1],
+            "strategy_params": json.loads(rel[2]),
+            "risk_fraction": float(rel[3]),
+            "atr_multiplier_sl": float(rel[4]),
+            "atr_multiplier_tp": float(rel[5]),
+            "commission_bps": float(rel[6]),
+            "commission_fixed": float(rel[7]),
+            "slippage_bps": float(rel[8]),
+            "gap_slippage_enabled": bool(rel[9]),
+            "description": rel[10] or "",
+            "updated_at": str(rel[11]),
+        }
+
+    def list_strategy_presets(self) -> list[dict[str, Any]]:
+        with duckdb.connect(self.db_path) as conn:
+            rows = conn.execute(
+                """
+                SELECT preset_name, strategy_id, strategy_params,
+                       risk_fraction, atr_multiplier_sl, atr_multiplier_tp,
+                       commission_bps, commission_fixed, slippage_bps, gap_slippage_enabled,
+                       description, updated_at
+                FROM strategy_presets
+                ORDER BY updated_at DESC
+                """
+            ).fetchall()
+
+        return [
+            {
+                "preset_name": r[0],
+                "strategy_id": r[1],
+                "strategy_params": json.loads(r[2]),
+                "risk_fraction": float(r[3]),
+                "atr_multiplier_sl": float(r[4]),
+                "atr_multiplier_tp": float(r[5]),
+                "commission_bps": float(r[6]),
+                "commission_fixed": float(r[7]),
+                "slippage_bps": float(r[8]),
+                "gap_slippage_enabled": bool(r[9]),
+                "description": r[10] or "",
+                "updated_at": str(r[11]),
+            }
+            for r in rows
+        ]
+
+    def delete_strategy_preset(self, preset_name: str) -> bool:
+        with duckdb.connect(self.db_path) as conn:
+            res = conn.execute("DELETE FROM strategy_presets WHERE preset_name = ?", [preset_name])
+            return res.fetchall() is not None

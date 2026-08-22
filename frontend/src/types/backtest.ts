@@ -207,3 +207,30 @@ export interface UnifiedDataPoint {
   unrealized_pnl: number;
   drawdown_pct: number;
 }
+
+export interface StrategyPreset {
+  preset_name: string;
+  strategy_id: string;
+  strategy_params: Record<string, any>;
+  risk_fraction: number;
+  atr_multiplier_sl: number;
+  atr_multiplier_tp: number;
+  commission_bps: number;
+  commission_fixed: number;
+  slippage_bps: number;
+  gap_slippage_enabled: boolean;
+  description?: string;
+  updated_at?: string;
+}
+
+export interface StrategyPresetListResponse {
+  presets: StrategyPreset[];
+}
+
+export interface StrategyRule {
+  id: string;
+  indicator_a: string;
+  operator: '>' | '<' | '>=' | '<=' | '==';
+  indicator_b?: string;
+  threshold?: number;
+}

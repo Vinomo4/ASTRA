@@ -4,25 +4,8 @@ from __future__ import annotations
 from typing import Any, List, Optional
 from pydantic import BaseModel, Field
 
-
-class ParameterDefinition(BaseModel):
-    name: str
-    label: str
-    param_type: str  # "int" | "float" | "bool" | "str" | "select"
-    default: Any
-    min_value: Optional[float] = None
-    max_value: Optional[float] = None
-    step: Optional[float] = None
-    options: Optional[List[str]] = None
-    description: str = ""
-
-
-class StrategyMetadata(BaseModel):
-    id: str
-    name: str
-    description: str
-    category: str = "Rule-Based"  # "Rule-Based" | "ML-Enhanced" | "Statistical"
-    parameters: List[ParameterDefinition] = Field(default_factory=list)
+# Single source of truth for strategy metadata
+from src.strategies.base_strategy import ParameterDefinition, StrategyMetadata
 
 
 class StrategyListResponse(BaseModel):
@@ -62,7 +45,7 @@ class BacktestRequest(BaseModel):
 
     # Dynamic Strategy Selection
     strategy_id: str = Field(
-        default="trend_following_ema",
+        default="regime_volatility_breakout",
         description="Identifier of the strategy registered in StrategyRegistry",
     )
     strategy_params: dict[str, Any] = Field(
@@ -212,3 +195,28 @@ class BacktestResponse(BaseModel):
     ohlc_history: List[OHLCPoint]
     snapshots: List[PortfolioSnapshot]
     trades: List[TradeItem]
+
+
+# --- Strategy Preset Management Schemas ---
+
+
+class StrategyPresetCreate(BaseModel):
+    preset_name: str = Field(..., min_length=2, max_length=60, description="Unique preset name")
+    strategy_id: str = Field(..., description="Target strategy identifier")
+    strategy_params: dict[str, Any] = Field(default_factory=dict)
+    risk_fraction: float = Field(default=0.01, ge=0.001, le=0.2)
+    atr_multiplier_sl: float = Field(default=2.0, ge=0.5, le=10.0)
+    atr_multiplier_tp: float = Field(default=4.0, ge=0.5, le=20.0)
+    commission_bps: float = Field(default=5.0, ge=0.0)
+    commission_fixed: float = Field(default=0.0, ge=0.0)
+    slippage_bps: float = Field(default=2.0, ge=0.0)
+    gap_slippage_enabled: bool = True
+    description: str = Field(default="", max_length=255)
+
+
+class StrategyPresetResponse(StrategyPresetCreate):
+    updated_at: str
+
+
+class StrategyPresetListResponse(BaseModel):
+    presets: List[StrategyPresetResponse]

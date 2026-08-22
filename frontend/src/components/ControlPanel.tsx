@@ -1,7 +1,20 @@
-// src/components/ControlPanel.tsx
-import React, { memo, useState, useEffect } from 'react';
-import { Play, Coins, Building2, Sliders, Dna, ChevronDown, ChevronUp, Layers } from 'lucide-react';
-import type { BacktestParams, StrategyMetadata } from '../types/backtest';
+// frontend/src/components/ControlPanel.tsx
+import React, { memo, useState, useEffect, useCallback } from 'react';
+import {
+  Play,
+  Coins,
+  Building2,
+  Sliders,
+  Dna,
+  ChevronDown,
+  ChevronUp,
+  Layers,
+  Bookmark,
+  Save,
+  Trash2,
+  X,
+} from 'lucide-react';
+import type { BacktestParams, StrategyMetadata, StrategyPreset } from '../types/backtest';
 
 const ASSET_PRESETS = [
   { symbol: 'AAPL', label: 'Apple Inc.', type: 'equity' },
@@ -10,34 +23,6 @@ const ASSET_PRESETS = [
   { symbol: 'BTC-USD', label: 'Bitcoin (USD)', type: 'crypto' },
   { symbol: 'ETH-USD', label: 'Ethereum (USD)', type: 'crypto' },
   { symbol: 'SOL-USD', label: 'Solana (USD)', type: 'crypto' },
-];
-
-const DEFAULT_STRATEGIES: StrategyMetadata[] = [
-  {
-    id: 'regime_volatility_breakout',
-    name: 'Regime-Filtered Volatility Breakout',
-    description: 'Donchian channel breakout filtered by ADX and volume expansion.',
-    category: 'Rule-Based',
-    parameters: [
-      { name: 'channel_period', label: 'Donchian Channel Period', param_type: 'int', default: 20, min_value: 5, max_value: 100, step: 1, description: 'Lookback window' },
-      { name: 'adx_period', label: 'ADX Period', param_type: 'int', default: 14, min_value: 5, max_value: 50, step: 1, description: 'ADX calculation window' },
-      { name: 'adx_threshold', label: 'ADX Threshold', param_type: 'float', default: 25.0, min_value: 10.0, max_value: 50.0, step: 1.0, description: 'Trend strength filter' },
-      { name: 'volume_ma_period', label: 'Volume MA Lookback', param_type: 'int', default: 20, min_value: 5, max_value: 100, step: 1, description: 'Baseline volume window' },
-      { name: 'volume_multiplier', label: 'Volume Expansion Factor', param_type: 'float', default: 1.2, min_value: 0.5, max_value: 3.0, step: 0.1, description: 'Relative volume threshold' },
-      { name: 'atr_period', label: 'ATR Period', param_type: 'int', default: 14, min_value: 5, max_value: 50, step: 1, description: 'Volatility sizing period' },
-    ],
-  },
-  {
-    id: 'trend_following_ema',
-    name: 'EMA Trend Following',
-    description: 'Fast/Slow Exponential Moving Average crossover system.',
-    category: 'Rule-Based',
-    parameters: [
-      { name: 'fast_ema', label: 'Fast EMA Period', param_type: 'int', default: 20, min_value: 3, max_value: 100, step: 1, description: 'Fast EMA window' },
-      { name: 'slow_ema', label: 'Slow EMA Period', param_type: 'int', default: 50, min_value: 10, max_value: 300, step: 1, description: 'Slow EMA window' },
-      { name: 'atr_period', label: 'ATR Period', param_type: 'int', default: 14, min_value: 5, max_value: 50, step: 1, description: 'Volatility sizing period' },
-    ],
-  },
 ];
 
 interface ControlPanelProps {
@@ -51,39 +36,48 @@ interface ControlPanelProps {
 export const ControlPanel = memo(({ params, setParams, onSubmit, loading, error }: ControlPanelProps) => {
   const [showFrictions, setShowFrictions] = useState(false);
   const [showMonteCarlo, setShowMonteCarlo] = useState(false);
-  const [strategies, setStrategies] = useState<StrategyMetadata[]>(DEFAULT_STRATEGIES);
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  
+  const [strategies, setStrategies] = useState<StrategyMetadata[]>([]);
+  const [presets, setPresets] = useState<StrategyPreset[]>([]);
+  const [selectedPresetName, setSelectedPresetName] = useState<string>('');
+  
+  // Preset modal form states
+  const [newPresetName, setNewPresetName] = useState('');
+  const [presetDescription, setPresetDescription] = useState('');
+  const [presetSaving, setPresetSaving] = useState(false);
+  const [presetMsg, setPresetMsg] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetch('http://127.0.0.1:8000/api/backtest/strategies')
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-        return res.json();
-      })
-      .then((data) => {
-        if (data.strategies && Array.isArray(data.strategies) && data.strategies.length > 0) {
-          setStrategies(data.strategies);
+  // Fetch strategies and saved presets
+  const loadStrategiesAndPresets = useCallback(async () => {
+    try {
+      const [stratRes, presetRes] = await Promise.all([
+        fetch('http://127.0.0.1:8000/api/backtest/strategies'),
+        fetch('http://127.0.0.1:8000/api/backtest/presets'),
+      ]);
 
-          const currentValid = data.strategies.some((s: StrategyMetadata) => s.id === params.strategy_id);
-          if (!params.strategy_id || !currentValid) {
-            const first = data.strategies[0];
-            const defaults: Record<string, any> = {};
-            first.parameters.forEach((p: any) => {
-              defaults[p.name] = p.default;
-            });
-            setParams((prev) => ({
-              ...prev,
-              strategy_id: first.id,
-              strategy_params: defaults,
-            }));
-          }
-        }
-      })
-      .catch((err) => console.warn('Using default fallback strategies:', err));
+      if (stratRes.ok) {
+        const stratData = await stratRes.json();
+        setStrategies(stratData.strategies || []);
+      }
+
+      if (presetRes.ok) {
+        const presetData = await presetRes.json();
+        setPresets(presetData.presets || []);
+      }
+    } catch (err) {
+      console.error('Failed to load strategies or presets:', err);
+    }
   }, []);
 
-  const activeStrategy = strategies.find((s) => s.id === params.strategy_id) || strategies[0] || DEFAULT_STRATEGIES[0];
+  useEffect(() => {
+    loadStrategiesAndPresets();
+  }, [loadStrategiesAndPresets]);
+
+  const activeStrategy = strategies.find((s) => s.id === params.strategy_id) || strategies[0];
 
   const handleStrategyChange = (strategyId: string) => {
+    setSelectedPresetName('');
     const selected = strategies.find((s) => s.id === strategyId);
     if (!selected) return;
 
@@ -99,6 +93,90 @@ export const ControlPanel = memo(({ params, setParams, onSubmit, loading, error 
     }));
   };
 
+  const handleApplyPreset = (presetName: string) => {
+    setSelectedPresetName(presetName);
+    if (!presetName) return;
+
+    const p = presets.find((item) => item.preset_name === presetName);
+    if (!p) return;
+
+    setParams((prev) => ({
+      ...prev,
+      strategy_id: p.strategy_id,
+      strategy_params: { ...p.strategy_params },
+      risk_fraction: p.risk_fraction,
+      atr_multiplier_sl: p.atr_multiplier_sl,
+      atr_multiplier_tp: p.atr_multiplier_tp,
+      commission_bps: p.commission_bps,
+      commission_fixed: p.commission_fixed,
+      slippage_bps: p.slippage_bps,
+      gap_slippage_enabled: p.gap_slippage_enabled,
+    }));
+  };
+
+  const handleSavePreset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPresetName.trim()) return;
+
+    setPresetSaving(true);
+    setPresetMsg(null);
+
+    const payload = {
+      preset_name: newPresetName.trim(),
+      strategy_id: params.strategy_id,
+      strategy_params: params.strategy_params,
+      risk_fraction: params.risk_fraction,
+      atr_multiplier_sl: params.atr_multiplier_sl,
+      atr_multiplier_tp: params.atr_multiplier_tp,
+      commission_bps: params.commission_bps,
+      commission_fixed: params.commission_fixed,
+      slippage_bps: params.slippage_bps,
+      gap_slippage_enabled: params.gap_slippage_enabled,
+      description: presetDescription.trim(),
+    };
+
+    try {
+      const res = await fetch('http://127.0.0.1:8000/api/backtest/presets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || 'Failed to save preset');
+      }
+
+      await loadStrategiesAndPresets();
+      setSelectedPresetName(payload.preset_name);
+      setShowSaveModal(false);
+      setNewPresetName('');
+      setPresetDescription('');
+    } catch (err: any) {
+      setPresetMsg(err.message);
+    } finally {
+      setPresetSaving(false);
+    }
+  };
+
+  const handleDeletePreset = async () => {
+    if (!selectedPresetName) return;
+    if (!window.confirm(`Delete preset "${selectedPresetName}"?`)) return;
+
+    try {
+      const res = await fetch(`http://127.0.0.1:8000/api/backtest/presets/${encodeURIComponent(selectedPresetName)}`, {
+        method: 'DELETE',
+      });
+
+      if (res.ok) {
+        setSelectedPresetName('');
+        await loadStrategiesAndPresets();
+      }
+    } catch (err) {
+      console.error('Failed to delete preset:', err);
+    }
+  };
+
   const handleParamChange = (name: string, value: any) => {
     setParams((prev) => ({
       ...prev,
@@ -111,23 +189,66 @@ export const ControlPanel = memo(({ params, setParams, onSubmit, loading, error 
 
   return (
     <>
-      {/* Asset Quick Selector */}
-      <div className="flex flex-wrap gap-2 mb-4">
-        {ASSET_PRESETS.map((preset) => (
+      {/* Top Bar: Asset Selection & Saved Strategy Presets */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
+        {/* Asset Quick Selector */}
+        <div className="flex flex-wrap gap-2">
+          {ASSET_PRESETS.map((preset) => (
+            <button
+              key={preset.symbol}
+              type="button"
+              onClick={() => setParams((p) => ({ ...p, symbol: preset.symbol }))}
+              className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition flex items-center gap-1.5 ${
+                params.symbol === preset.symbol
+                  ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
+                  : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-white'
+              }`}
+            >
+              {preset.type === 'crypto' ? <Coins size={13} /> : <Building2 size={13} />}
+              {preset.symbol}
+            </button>
+          ))}
+        </div>
+
+        {/* Strategy Profile Preset Manager */}
+        <div className="flex items-center gap-2">
+          <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1">
+            <Bookmark size={13} className="text-amber-400 mr-1.5" />
+            <select
+              value={selectedPresetName}
+              onChange={(e) => handleApplyPreset(e.target.value)}
+              className="bg-transparent text-xs text-white focus:outline-none cursor-pointer"
+            >
+              <option value="" className="bg-slate-900 text-slate-400">
+                — Load Saved Preset —
+              </option>
+              {presets.map((pr) => (
+                <option key={pr.preset_name} value={pr.preset_name} className="bg-slate-900 text-white">
+                  {pr.preset_name} ({pr.strategy_id})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {selectedPresetName && (
+            <button
+              type="button"
+              onClick={handleDeletePreset}
+              title="Delete loaded preset"
+              className="p-1.5 bg-rose-500/10 border border-rose-500/30 text-rose-400 hover:bg-rose-500/20 rounded-lg transition"
+            >
+              <Trash2 size={14} />
+            </button>
+          )}
+
           <button
-            key={preset.symbol}
             type="button"
-            onClick={() => setParams((p) => ({ ...p, symbol: preset.symbol }))}
-            className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition flex items-center gap-1.5 ${
-              params.symbol === preset.symbol
-                ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
-                : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-white'
-            }`}
+            onClick={() => setShowSaveModal(true)}
+            className="flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 hover:bg-amber-500/20 transition"
           >
-            {preset.type === 'crypto' ? <Coins size={13} /> : <Building2 size={13} />}
-            {preset.symbol}
+            <Save size={13} /> Save Preset
           </button>
-        ))}
+        </div>
       </div>
 
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 mb-8 shadow-sm">
@@ -144,7 +265,7 @@ export const ControlPanel = memo(({ params, setParams, onSubmit, loading, error 
                 className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500"
               >
                 {strategies.map((strat) => (
-                  <option key={strat.id} value={strat.id} className="bg-slate-900 text-white py-1">
+                  <option key={strat.id} value={strat.id} className="bg-slate-900 text-white">
                     {strat.name}
                   </option>
                 ))}
@@ -369,6 +490,80 @@ export const ControlPanel = memo(({ params, setParams, onSubmit, loading, error 
 
         {error && <p className="text-rose-400 text-xs mt-3 font-mono">{error}</p>}
       </div>
+
+      {/* Save Preset Modal */}
+      {showSaveModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-xl max-w-md w-full p-6 shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <Bookmark className="text-amber-400" size={16} /> Save Strategy Preset
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowSaveModal(false)}
+                className="text-slate-400 hover:text-white"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSavePreset} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Preset Profile Name</label>
+                <input
+                  type="text"
+                  placeholder="e.g. BTC Breakout Aggressive (10-30)"
+                  required
+                  value={newPresetName}
+                  onChange={(e) => setNewPresetName(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Strategy Architecture</label>
+                <input
+                  type="text"
+                  disabled
+                  value={activeStrategy?.name || params.strategy_id}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-400"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Notes / Description (Optional)</label>
+                <textarea
+                  rows={2}
+                  placeholder="e.g. Optimized for 2023-2024 bull cycle with 1.5 ATR trailing stops"
+                  value={presetDescription}
+                  onChange={(e) => setPresetDescription(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none"
+                />
+              </div>
+
+              {presetMsg && <p className="text-xs text-rose-400">{presetMsg}</p>}
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowSaveModal(false)}
+                  className="text-xs px-3 py-2 rounded-lg text-slate-400 hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={presetSaving}
+                  className="text-xs font-semibold px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold transition disabled:opacity-50"
+                >
+                  {presetSaving ? 'Saving...' : 'Save Profile'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </>
   );
 });
