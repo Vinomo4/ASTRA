@@ -37,7 +37,7 @@ interface BacktestContextType {
 const BacktestContext = createContext<BacktestContextType | null>(null);
 
 export const BacktestProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [activeTab, setActiveTab] = useState<WorkspaceTab>('performance');
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>('studio');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<BacktestResult | null>(null);

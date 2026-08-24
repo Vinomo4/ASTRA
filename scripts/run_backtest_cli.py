@@ -1,5 +1,4 @@
 # scripts/run_backtest_cli.py
-from src.analytics.metrics import PerformanceAnalytics
 from src.backtester.event_engine import BacktestEngine
 from src.data_engine.storage_manager import StorageManager
 from src.strategies.trend_following import TrendFollowingStrategy

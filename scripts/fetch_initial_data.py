@@ -1,5 +1,6 @@
 # scripts/fetch_initial_data.py
 import duckdb
+
 from src.core.config import settings
 from src.data_engine.storage_manager import StorageManager
 from src.data_engine.yfinance_loader import YFinanceLoader
