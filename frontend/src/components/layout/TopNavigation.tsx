@@ -1,6 +1,6 @@
 // frontend/src/components/layout/TopNavigation.tsx
 import React from 'react';
-import { Sliders, Activity, ShieldAlert, Cpu, GitCompare } from 'lucide-react';
+import { Sliders, Activity, ShieldAlert, Cpu, GitCompare, Sparkles } from 'lucide-react';
 import { useBacktest, type WorkspaceTab } from '../../context/BacktestContext';
 
 export const TopNavigation: React.FC = () => {
@@ -24,12 +24,18 @@ export const TopNavigation: React.FC = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-14">
           {/* Logo & Platform Context */}
-          <div className="flex items-center gap-2.5">
-            <div className="bg-emerald-500/20 border border-emerald-500/50 px-2 py-1 rounded-lg text-emerald-400 font-bold text-xs font-mono">
-              UB-TFM
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-1 rounded-lg">
+              <Sparkles size={14} className="text-emerald-400" />
+              <span className="text-xs font-bold text-white tracking-widest font-mono">ASTRA</span>
+              <span className="text-[10px] bg-slate-900 text-emerald-400 font-semibold px-1.5 py-0.2 rounded border border-emerald-500/20">
+                UB-TFM
+              </span>
             </div>
-            <div>
-              <h1 className="text-xs font-bold text-white">Algorithmic Trading & ML Bot Engine</h1>
+            <div className="hidden md:block">
+              <h1 className="text-xs font-semibold text-slate-200">
+                Algorithmic Stress Testing & Robustness Analytics
+              </h1>
             </div>
           </div>
 
