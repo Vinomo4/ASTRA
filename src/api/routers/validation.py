@@ -12,7 +12,7 @@ router = APIRouter()
 @router.post("/walk-forward", response_model=WalkForwardResponse)
 async def run_walk_forward_validation(req: WalkForwardRequest) -> WalkForwardResponse:
     """
-    Executes an In-Sample vs. Out-of-Sample chronological validation split
+    Executes an In-Sample / Out-of-Sample Walk-Forward train-test split
     and computes the Walk-Forward Efficiency Ratio (WFER) for overfitting diagnostics.
     """
     engine = WalkForwardEngine()
@@ -23,8 +23,9 @@ async def run_walk_forward_validation(req: WalkForwardRequest) -> WalkForwardRes
             end_date=req.end_date,
             strategy_id=req.strategy_id,
             strategy_params=req.strategy_params,
-            initial_capital=req.initial_capital,
+            timeframe=req.timeframe,
             train_ratio=req.train_ratio,
+            initial_capital=req.initial_capital,
             risk_fraction=req.risk_fraction,
             atr_multiplier_sl=req.atr_multiplier_sl,
             atr_multiplier_tp=req.atr_multiplier_tp,

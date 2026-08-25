@@ -2,9 +2,10 @@
 from __future__ import annotations
 
 from typing import Any
-
 import pandas as pd
 
+from src.analytics.metrics import PerformanceAnalytics
+from src.api.routers.simulation import get_market_data
 from src.backtester.event_engine import BacktestEngine
 from src.data_engine.storage_manager import StorageManager
 from src.data_engine.yfinance_loader import YFinanceLoader
@@ -16,27 +17,18 @@ class WalkForwardEngine:
         self.storage = storage or StorageManager()
         self.loader = YFinanceLoader()
 
-    def _fetch_market_data(self, symbol: str, start_date: str, end_date: str) -> pd.DataFrame:
-        """Loads data from local DuckDB or fetches via YFinanceLoader with fallback methods."""
-        df = self.storage.load_ohlcv(symbol, start_date, end_date)
-        if not df.empty:
-            return df
-
-        if hasattr(self.loader, "fetch_data"):
-            df = self.loader.fetch_data(symbol, start_date, end_date)
-        elif hasattr(self.loader, "fetch"):
-            df = self.loader.fetch(symbol, start_date, end_date)
-        elif hasattr(self.loader, "load_data"):
-            df = self.loader.load_data(symbol, start_date, end_date)
-        elif hasattr(self.loader, "load"):
-            df = self.loader.load(symbol, start_date, end_date)
-        else:
-            raise AttributeError("YFinanceLoader has no recognized fetch or load method.")
-
-        if not df.empty:
-            self.storage.save_ohlcv(df)
-
-        return df
+    def _fetch_market_data(
+        self, symbol: str, start_date: str, end_date: str, timeframe: str = "1d"
+    ) -> pd.DataFrame:
+        """Loads data via tiered cache (RAM -> DuckDB -> YFinance)."""
+        return get_market_data(
+            symbol=symbol,
+            start_date=start_date,
+            end_date=end_date,
+            timeframe=timeframe,
+            storage=self.storage,
+            loader=self.loader,
+        )
 
     @staticmethod
     def _extract_metric(res: dict[str, Any], key: str, default: float = 0.0) -> float:
@@ -57,13 +49,15 @@ class WalkForwardEngine:
         return default
 
     @staticmethod
-    def _extract_timeline(equity_curve: Any, is_oos: bool) -> list[dict[str, Any]]:
-        """Parses Series, dict, or list representation of equity trajectories."""
+    def _extract_timeline(
+        equity_curve: Any, is_oos: bool, time_fmt: str = "%Y-%m-%d"
+    ) -> list[dict[str, Any]]:
+        """Parses Series, dict, or list representation of equity trajectories with correct time format."""
         timeline: list[dict[str, Any]] = []
 
         if isinstance(equity_curve, dict):
             for k, v in equity_curve.items():
-                t_str = str(k).split(" ")[0].split("T")[0]
+                t_str = pd.to_datetime(k).strftime(time_fmt)
                 val = round(float(v), 2) if v is not None else 0.0
                 timeline.append(
                     {
@@ -83,7 +77,7 @@ class WalkForwardEngine:
                     v = getattr(item, "value", None) or getattr(item, "equity", None)
 
                 if t is not None and v is not None:
-                    t_str = str(t).split(" ")[0].split("T")[0]
+                    t_str = pd.to_datetime(t).strftime(time_fmt)
                     val = round(float(v), 2)
                     timeline.append(
                         {
@@ -103,6 +97,7 @@ class WalkForwardEngine:
         end_date: str,
         strategy_id: str,
         strategy_params: dict[str, Any],
+        timeframe: str = "1d",
         initial_capital: float = 100_000.0,
         train_ratio: float = 0.70,
         risk_fraction: float = 0.01,
@@ -115,13 +110,13 @@ class WalkForwardEngine:
     ) -> dict[str, Any]:
         """
         Partitions chronological historical data into In-Sample (IS) and Out-of-Sample (OOS)
-        periods to evaluate performance decay and rule stability.
+        periods across the selected timeframe to evaluate performance decay and rule stability.
         """
-        # 1. Fetch complete historical dataset
-        df = self._fetch_market_data(symbol, start_date, end_date)
-        if df.empty or len(df) < 50:
+        # 1. Fetch complete historical dataset via cache
+        df = self._fetch_market_data(symbol, start_date, end_date, timeframe=timeframe)
+        if df.empty or len(df) < 40:
             raise ValueError(
-                f"Insufficient historical data for symbol '{symbol}' ({len(df)} bars)."
+                f"Insufficient historical data for symbol '{symbol}' ({len(df)} bars) with timeframe '{timeframe}'."
             )
 
         df = df.sort_values("timestamp").reset_index(drop=True)
@@ -130,7 +125,9 @@ class WalkForwardEngine:
         df_train = df.iloc[:split_idx].copy().reset_index(drop=True)
         df_test = df.iloc[split_idx:].copy().reset_index(drop=True)
 
-        split_date = str(df.iloc[split_idx]["timestamp"]).split(" ")[0].split("T")[0]
+        is_intraday = timeframe in ("15m", "1h", "4h", "5m")
+        time_fmt = "%Y-%m-%d %H:%M" if is_intraday else "%Y-%m-%d"
+        split_date = pd.to_datetime(df.iloc[split_idx]["timestamp"]).strftime(time_fmt)
 
         # 2. Execute In-Sample Simulation
         strat_is = StrategyRegistry.create(strategy_id, **strategy_params)
@@ -173,13 +170,17 @@ class WalkForwardEngine:
         tot_ret_oos = self._extract_metric(res_oos, "total_return_pct", 0.0)
         sortino_is = self._extract_metric(res_is, "sortino_ratio", 0.0)
         sortino_oos = self._extract_metric(res_oos, "sortino_ratio", 0.0)
-        win_rate_is = self._extract_metric(res_is, "win_rate_pct", 0.0)
-        win_rate_oos = self._extract_metric(res_oos, "win_rate_pct", 0.0)
-        pf_is = self._extract_metric(res_is, "profit_factor", 0.0)
-        pf_oos = self._extract_metric(res_oos, "profit_factor", 0.0)
 
-        trades_is = int(res_is.get("total_trades", len(res_is.get("trades", []))))
-        trades_oos = int(res_oos.get("total_trades", len(res_oos.get("trades", []))))
+        stats_is = PerformanceAnalytics.calculate_trade_statistics(engine_is.trades)
+        stats_oos = PerformanceAnalytics.calculate_trade_statistics(engine_oos.trades)
+
+        win_rate_is = float(stats_is.get("win_rate_pct", 0.0))
+        win_rate_oos = float(stats_oos.get("win_rate_pct", 0.0))
+        pf_is = float(stats_is.get("profit_factor", 0.0))
+        pf_oos = float(stats_oos.get("profit_factor", 0.0))
+
+        trades_is = int(res_is.get("total_trades", len(engine_is.trades)))
+        trades_oos = int(res_oos.get("total_trades", len(engine_oos.trades)))
 
         # Walk-Forward Efficiency Ratio (WFER)
         if cagr_is > 0:
@@ -195,7 +196,7 @@ class WalkForwardEngine:
         else:
             sharpe_decay_pct = 0.0
 
-        # Qualitative Robustness Classification
+        # Robustness Classification
         if wfer >= 0.60 and sharpe_oos >= 0.8:
             robustness_status = "ROBUST"
         elif wfer >= 0.35 and sharpe_oos >= 0.3:
@@ -204,12 +205,17 @@ class WalkForwardEngine:
             robustness_status = "OVERFITTED"
 
         # 5. Extract Chronological Trajectory
-        timeline_is = self._extract_timeline(res_is.get("equity_curve", {}), is_oos=False)
-        timeline_oos = self._extract_timeline(res_oos.get("equity_curve", {}), is_oos=True)
+        timeline_is = self._extract_timeline(
+            res_is.get("equity_curve", {}), is_oos=False, time_fmt=time_fmt
+        )
+        timeline_oos = self._extract_timeline(
+            res_oos.get("equity_curve", {}), is_oos=True, time_fmt=time_fmt
+        )
 
         return {
             "symbol": symbol,
             "strategy_id": strategy_id,
+            "timeframe": timeframe,
             "train_ratio": train_ratio,
             "split_date": split_date,
             "total_bars": len(df),
@@ -240,3 +246,6 @@ class WalkForwardEngine:
             },
             "combined_timeline": timeline_is + timeline_oos,
         }
+
+    # Backward compatibility alias
+    run = run_split_validation

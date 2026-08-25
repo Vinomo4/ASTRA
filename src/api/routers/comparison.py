@@ -13,7 +13,7 @@ router = APIRouter()
 async def run_strategy_comparison(req: ComparisonRequest) -> ComparisonResponse:
     """
     Executes a side-by-side comparative backtest between Strategy A and Strategy B
-    under identical data, initial capital, and friction conditions.
+    under identical data, timeframe, initial capital, and friction conditions.
     """
     engine = ComparatorEngine()
     try:
@@ -21,6 +21,7 @@ async def run_strategy_comparison(req: ComparisonRequest) -> ComparisonResponse:
             symbol=req.symbol,
             start_date=req.start_date,
             end_date=req.end_date,
+            timeframe=req.timeframe,
             strategy_a_id=req.strategy_a.strategy_id,
             strategy_a_params=req.strategy_a.strategy_params,
             strategy_a_name=req.strategy_a.name,

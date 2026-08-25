@@ -32,7 +32,7 @@ class StorageManager:
                 )
                 """
             )
-            # Automatic schema migration for existing databases missing the timeframe column
+            # Schema migrations for existing databases
             try:
                 conn.execute(
                     "ALTER TABLE ohlcv ADD COLUMN IF NOT EXISTS timeframe VARCHAR DEFAULT '1d'"
@@ -45,6 +45,7 @@ class StorageManager:
                 CREATE TABLE IF NOT EXISTS strategy_presets (
                     preset_name VARCHAR PRIMARY KEY,
                     strategy_id VARCHAR NOT NULL,
+                    timeframe VARCHAR DEFAULT '1d',
                     strategy_params VARCHAR NOT NULL,
                     risk_fraction DOUBLE NOT NULL,
                     atr_multiplier_sl DOUBLE NOT NULL,
@@ -59,6 +60,12 @@ class StorageManager:
                 )
                 """
             )
+            try:
+                conn.execute(
+                    "ALTER TABLE strategy_presets ADD COLUMN IF NOT EXISTS timeframe VARCHAR DEFAULT '1d'"
+                )
+            except Exception:
+                pass
 
     def save_ohlcv(self, df: pd.DataFrame, timeframe: str = "1d") -> None:
         if df.empty:
@@ -106,6 +113,7 @@ class StorageManager:
         risk_fraction: float,
         atr_multiplier_sl: float,
         atr_multiplier_tp: float,
+        timeframe: str = "1d",
         commission_bps: float = 5.0,
         commission_fixed: float = 0.0,
         slippage_bps: float = 2.0,
@@ -117,15 +125,16 @@ class StorageManager:
             conn.execute(
                 """
                 INSERT OR REPLACE INTO strategy_presets (
-                    preset_name, strategy_id, strategy_params,
+                    preset_name, strategy_id, timeframe, strategy_params,
                     risk_fraction, atr_multiplier_sl, atr_multiplier_tp,
                     commission_bps, commission_fixed, slippage_bps, gap_slippage_enabled,
                     description, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 """,
                 [
                     preset_name,
                     strategy_id,
+                    timeframe,
                     params_json,
                     risk_fraction,
                     atr_multiplier_sl,
@@ -143,7 +152,7 @@ class StorageManager:
         with duckdb.connect(self.db_path) as conn:
             rel = conn.execute(
                 """
-                SELECT preset_name, strategy_id, strategy_params,
+                SELECT preset_name, strategy_id, timeframe, strategy_params,
                        risk_fraction, atr_multiplier_sl, atr_multiplier_tp,
                        commission_bps, commission_fixed, slippage_bps, gap_slippage_enabled,
                        description, updated_at
@@ -159,23 +168,24 @@ class StorageManager:
         return {
             "preset_name": rel[0],
             "strategy_id": rel[1],
-            "strategy_params": json.loads(rel[2]),
-            "risk_fraction": float(rel[3]),
-            "atr_multiplier_sl": float(rel[4]),
-            "atr_multiplier_tp": float(rel[5]),
-            "commission_bps": float(rel[6]),
-            "commission_fixed": float(rel[7]),
-            "slippage_bps": float(rel[8]),
-            "gap_slippage_enabled": bool(rel[9]),
-            "description": rel[10] or "",
-            "updated_at": str(rel[11]),
+            "timeframe": rel[2] or "1d",
+            "strategy_params": json.loads(rel[3]),
+            "risk_fraction": float(rel[4]),
+            "atr_multiplier_sl": float(rel[5]),
+            "atr_multiplier_tp": float(rel[6]),
+            "commission_bps": float(rel[7]),
+            "commission_fixed": float(rel[8]),
+            "slippage_bps": float(rel[9]),
+            "gap_slippage_enabled": bool(rel[10]),
+            "description": rel[11] or "",
+            "updated_at": str(rel[12]),
         }
 
     def list_strategy_presets(self) -> list[dict[str, Any]]:
         with duckdb.connect(self.db_path) as conn:
             rows = conn.execute(
                 """
-                SELECT preset_name, strategy_id, strategy_params,
+                SELECT preset_name, strategy_id, timeframe, strategy_params,
                        risk_fraction, atr_multiplier_sl, atr_multiplier_tp,
                        commission_bps, commission_fixed, slippage_bps, gap_slippage_enabled,
                        description, updated_at
@@ -188,16 +198,17 @@ class StorageManager:
             {
                 "preset_name": r[0],
                 "strategy_id": r[1],
-                "strategy_params": json.loads(r[2]),
-                "risk_fraction": float(r[3]),
-                "atr_multiplier_sl": float(r[4]),
-                "atr_multiplier_tp": float(r[5]),
-                "commission_bps": float(r[6]),
-                "commission_fixed": float(r[7]),
-                "slippage_bps": float(r[8]),
-                "gap_slippage_enabled": bool(r[9]),
-                "description": r[10] or "",
-                "updated_at": str(r[11]),
+                "timeframe": r[2] or "1d",
+                "strategy_params": json.loads(r[3]),
+                "risk_fraction": float(r[4]),
+                "atr_multiplier_sl": float(r[5]),
+                "atr_multiplier_tp": float(r[6]),
+                "commission_bps": float(r[7]),
+                "commission_fixed": float(r[8]),
+                "slippage_bps": float(r[9]),
+                "gap_slippage_enabled": bool(r[10]),
+                "description": r[11] or "",
+                "updated_at": str(r[12]),
             }
             for r in rows
         ]

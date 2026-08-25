@@ -15,6 +15,7 @@ class ComparisonRequest(BaseModel):
     symbol: str
     start_date: str
     end_date: str
+    timeframe: str = Field(default="1d", description="Bar interval: 15m, 1h, 4h, 1d, 1wk")
     initial_capital: float = Field(default=100000.0, gt=0)
     strategy_a: ComparisonModelConfig
     strategy_b: ComparisonModelConfig
@@ -63,6 +64,7 @@ class ComparisonResponse(BaseModel):
     symbol: str
     start_date: str
     end_date: str
+    timeframe: str = "1d"
     strategy_a: StrategyComparisonMetrics
     strategy_b: StrategyComparisonMetrics
     attribution: AlphaAttributionDelta

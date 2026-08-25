@@ -2,9 +2,10 @@
 from __future__ import annotations
 
 from typing import Any
-
 import pandas as pd
 
+from src.analytics.metrics import PerformanceAnalytics
+from src.api.routers.simulation import get_market_data
 from src.backtester.event_engine import BacktestEngine
 from src.data_engine.storage_manager import StorageManager
 from src.data_engine.yfinance_loader import YFinanceLoader
@@ -16,26 +17,17 @@ class ComparatorEngine:
         self.storage = storage or StorageManager()
         self.loader = YFinanceLoader()
 
-    def _fetch_market_data(self, symbol: str, start_date: str, end_date: str) -> pd.DataFrame:
-        df = self.storage.load_ohlcv(symbol, start_date, end_date)
-        if not df.empty:
-            return df
-
-        if hasattr(self.loader, "fetch_data"):
-            df = self.loader.fetch_data(symbol, start_date, end_date)
-        elif hasattr(self.loader, "fetch"):
-            df = self.loader.fetch(symbol, start_date, end_date)
-        elif hasattr(self.loader, "load_data"):
-            df = self.loader.load_data(symbol, start_date, end_date)
-        elif hasattr(self.loader, "load"):
-            df = self.loader.load(symbol, start_date, end_date)
-        else:
-            raise AttributeError("YFinanceLoader has no recognized fetch or load method.")
-
-        if not df.empty:
-            self.storage.save_ohlcv(df)
-
-        return df
+    def _fetch_market_data(
+        self, symbol: str, start_date: str, end_date: str, timeframe: str = "1d"
+    ) -> pd.DataFrame:
+        return get_market_data(
+            symbol=symbol,
+            start_date=start_date,
+            end_date=end_date,
+            timeframe=timeframe,
+            storage=self.storage,
+            loader=self.loader,
+        )
 
     @staticmethod
     def _extract_metric(res: dict[str, Any], key: str, default: float = 0.0) -> float:
@@ -72,6 +64,7 @@ class ComparatorEngine:
         strategy_b_id: str,
         strategy_b_params: dict[str, Any],
         strategy_b_name: str,
+        timeframe: str = "1d",
         initial_capital: float = 100_000.0,
         risk_fraction: float = 0.01,
         atr_multiplier_sl: float = 2.0,
@@ -82,10 +75,10 @@ class ComparatorEngine:
         gap_slippage_enabled: bool = True,
     ) -> dict[str, Any]:
         """Runs identical simulations for two distinct models and computes alpha attribution."""
-        df = self._fetch_market_data(symbol, start_date, end_date)
-        if df.empty or len(df) < 50:
+        df = self._fetch_market_data(symbol, start_date, end_date, timeframe=timeframe)
+        if df.empty or len(df) < 30:
             raise ValueError(
-                f"Insufficient historical data for symbol '{symbol}' ({len(df)} bars)."
+                f"Insufficient historical data for symbol '{symbol}' ({len(df)} bars) with timeframe '{timeframe}'."
             )
 
         df = df.sort_values("timestamp").reset_index(drop=True)
@@ -120,13 +113,27 @@ class ComparatorEngine:
         )
         res_b = engine_b.run(df)
 
-        # 3. Process Model Metrics
+        # 3. Compute Benchmark & Alpha/Beta Series
+        initial_close = float(df.iloc[0]["close"])
+        benchmark_shares = initial_capital / initial_close
+        bench_series = df.set_index("timestamp")["close"] * benchmark_shares
+
+        equity_a_series = pd.Series(res_a["equity_curve"])
+        equity_b_series = pd.Series(res_b["equity_curve"])
+
+        alpha_a, beta_a = PerformanceAnalytics.calculate_alpha_beta(equity_a_series, bench_series)
+        alpha_b, beta_b = PerformanceAnalytics.calculate_alpha_beta(equity_b_series, bench_series)
+
+        # 4. Process Model Metrics
         frictions_a = (res_a.get("total_fees_paid") or 0.0) + (
             res_a.get("total_slippage_paid") or 0.0
         )
         frictions_b = (res_b.get("total_fees_paid") or 0.0) + (
             res_b.get("total_slippage_paid") or 0.0
         )
+
+        stats_a = PerformanceAnalytics.calculate_trade_statistics(engine_a.trades)
+        stats_b = PerformanceAnalytics.calculate_trade_statistics(engine_b.trades)
 
         metrics_a = {
             "strategy_name": strategy_a_name,
@@ -135,11 +142,11 @@ class ComparatorEngine:
             "sharpe_ratio": round(self._extract_metric(res_a, "sharpe_ratio"), 2),
             "sortino_ratio": round(self._extract_metric(res_a, "sortino_ratio"), 2),
             "max_drawdown_pct": round(self._extract_metric(res_a, "max_drawdown_pct"), 2),
-            "win_rate_pct": round(self._extract_metric(res_a, "win_rate_pct"), 2),
-            "profit_factor": round(self._extract_metric(res_a, "profit_factor"), 2),
-            "total_trades": int(res_a.get("total_trades", len(res_a.get("trades", [])))),
-            "alpha": round(self._extract_metric(res_a, "alpha"), 2),
-            "beta": round(self._extract_metric(res_a, "beta"), 2),
+            "win_rate_pct": round(float(stats_a.get("win_rate_pct", 0.0)), 2),
+            "profit_factor": round(float(stats_a.get("profit_factor", 0.0)), 2),
+            "total_trades": int(res_a.get("total_trades", len(engine_a.trades))),
+            "alpha": round(alpha_a * 100, 2),
+            "beta": round(beta_a, 2),
             "total_frictions": round(frictions_a, 2),
         }
 
@@ -150,15 +157,15 @@ class ComparatorEngine:
             "sharpe_ratio": round(self._extract_metric(res_b, "sharpe_ratio"), 2),
             "sortino_ratio": round(self._extract_metric(res_b, "sortino_ratio"), 2),
             "max_drawdown_pct": round(self._extract_metric(res_b, "max_drawdown_pct"), 2),
-            "win_rate_pct": round(self._extract_metric(res_b, "win_rate_pct"), 2),
-            "profit_factor": round(self._extract_metric(res_b, "profit_factor"), 2),
-            "total_trades": int(res_b.get("total_trades", len(res_b.get("trades", [])))),
-            "alpha": round(self._extract_metric(res_b, "alpha"), 2),
-            "beta": round(self._extract_metric(res_b, "beta"), 2),
+            "win_rate_pct": round(float(stats_b.get("win_rate_pct", 0.0)), 2),
+            "profit_factor": round(float(stats_b.get("profit_factor", 0.0)), 2),
+            "total_trades": int(res_b.get("total_trades", len(engine_b.trades))),
+            "alpha": round(alpha_b * 100, 2),
+            "beta": round(beta_b, 2),
             "total_frictions": round(frictions_b, 2),
         }
 
-        # 4. Compute Alpha Attribution Deltas (Model A minus Model B)
+        # 5. Compute Alpha Attribution Deltas
         delta_ret = metrics_a["total_return_pct"] - metrics_b["total_return_pct"]
         delta_cagr = metrics_a["cagr"] - metrics_b["cagr"]
         delta_sharpe = metrics_a["sharpe_ratio"] - metrics_b["sharpe_ratio"]
@@ -183,34 +190,39 @@ class ComparatorEngine:
             "outperforming_strategy": outperforming,
         }
 
-        # 5. Build Unified Timeline Curve
+        # 6. Build Unified Timeline Curve
+        is_intraday = timeframe in ("15m", "1h", "4h", "5m")
+        time_fmt = "%Y-%m-%d %H:%M" if is_intraday else "%Y-%m-%d"
+
         eq_map_a = {
-            str(k).split(" ")[0].split("T")[0]: float(v) for k, v in res_a["equity_curve"].items()
+            pd.to_datetime(k).strftime(time_fmt): float(v) for k, v in res_a["equity_curve"].items()
         }
         eq_map_b = {
-            str(k).split(" ")[0].split("T")[0]: float(v) for k, v in res_b["equity_curve"].items()
+            pd.to_datetime(k).strftime(time_fmt): float(v) for k, v in res_b["equity_curve"].items()
         }
         bench_map = {
-            str(b["time"]).split(" ")[0].split("T")[0]: float(b["equity"])
-            for b in res_a.get("benchmark_curve", [])
+            pd.to_datetime(row["timestamp"]).strftime(time_fmt): float(
+                row["close"] * benchmark_shares
+            )
+            for _, row in df.iterrows()
         }
 
         all_dates = sorted(set(eq_map_a.keys()) | set(eq_map_b.keys()) | set(bench_map.keys()))
-        timeline = []
-        for d in all_dates:
-            timeline.append(
-                {
-                    "time": d,
-                    "equity_a": round(eq_map_a.get(d, initial_capital), 2),
-                    "equity_b": round(eq_map_b.get(d, initial_capital), 2),
-                    "benchmark_equity": round(bench_map.get(d, initial_capital), 2),
-                }
-            )
+        timeline = [
+            {
+                "time": d,
+                "equity_a": round(eq_map_a.get(d, initial_capital), 2),
+                "equity_b": round(eq_map_b.get(d, initial_capital), 2),
+                "benchmark_equity": round(bench_map.get(d, initial_capital), 2),
+            }
+            for d in all_dates
+        ]
 
         return {
             "symbol": symbol,
             "start_date": start_date,
             "end_date": end_date,
+            "timeframe": timeframe,
             "strategy_a": metrics_a,
             "strategy_b": metrics_b,
             "attribution": attribution,

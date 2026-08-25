@@ -28,6 +28,14 @@ import { TradeAuditTable } from '../TradeAuditTable';
 import { CandlestickShape } from '../charts/CandlestickShape';
 import { ExecutionMarkerShape } from '../charts/ExecutionMarkerShape';
 import { FastTooltipBridge } from '../charts/FastTooltipBridge';
+import {
+  formatAxisPrice,
+  formatAdaptivePrice,
+  formatCompactCurrency,
+  formatCompactVolume,
+  formatAxisDate,
+  formatPercent,
+} from '../../utils/formatters';
 
 const TIMEFRAME_OPTIONS = [
   { label: '15m', value: '15m' },
@@ -47,7 +55,6 @@ const ZOOM_OPTIONS = [
 export const PerformanceAuditView: React.FC = () => {
   const { results, params, setTimeframe, runSimulation, loading, setActiveTab } = useBacktest();
 
-  // Chart configuration: default to all bars and candlesticks
   const [chartMode, setChartMode] = useState<'candles' | 'line'>('candles');
   const [showVolume, setShowVolume] = useState<boolean>(true);
   const [zoomBars, setZoomBars] = useState<number>(0);
@@ -60,6 +67,16 @@ export const PerformanceAuditView: React.FC = () => {
   const avgPriceRef = useRef<HTMLParagraphElement>(null);
   const pnlRef = useRef<HTMLParagraphElement>(null);
   const ddRef = useRef<HTMLParagraphElement>(null);
+
+  const isIntraday = useMemo(
+    () => ['15m', '1h', '4h', '5m'].includes(params.timeframe || '1d'),
+    [params.timeframe]
+  );
+
+  const formatXTick = useCallback(
+    (timeStr: string) => formatAxisDate(timeStr, isIntraday),
+    [isIntraday]
+  );
 
   const fullTimeline = useMemo(() => {
     if (!results || !results.snapshots || !results.ohlc_history) return [];
@@ -112,19 +129,27 @@ export const PerformanceAuditView: React.FC = () => {
       badgeRef.current.className = isHover ? 'text-emerald-400 font-semibold mr-1.5' : 'text-slate-500 mr-1.5';
     }
     if (dateRef.current) dateRef.current.textContent = data.time;
-    if (equityRef.current) equityRef.current.textContent = `$${data.equity.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-    if (cashRef.current) cashRef.current.textContent = `$${data.cash.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    if (equityRef.current) equityRef.current.textContent = formatAdaptivePrice(data.equity);
+    if (cashRef.current) cashRef.current.textContent = formatAdaptivePrice(data.cash);
     if (unitsRef.current) unitsRef.current.textContent = data.position_quantity.toString();
-    if (avgPriceRef.current) avgPriceRef.current.textContent = data.position_avg_price > 0 ? `$${data.position_avg_price.toFixed(2)}` : '—';
+    if (avgPriceRef.current) {
+      avgPriceRef.current.textContent =
+        data.position_avg_price > 0 ? formatAdaptivePrice(data.position_avg_price) : '—';
+    }
 
     if (pnlRef.current) {
-      pnlRef.current.textContent = `$${data.unrealized_pnl.toFixed(2)}`;
-      pnlRef.current.className = `text-base font-bold ${data.unrealized_pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`;
+      const pnlSign = data.unrealized_pnl > 0 ? '+' : '';
+      pnlRef.current.textContent = `${pnlSign}${formatAdaptivePrice(data.unrealized_pnl)}`;
+      pnlRef.current.className = `text-base font-bold ${
+        data.unrealized_pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'
+      }`;
     }
 
     if (ddRef.current) {
-      ddRef.current.textContent = `${data.drawdown_pct.toFixed(2)}%`;
-      ddRef.current.className = `text-base font-bold ${data.drawdown_pct < 0 ? 'text-rose-400' : 'text-slate-400'}`;
+      ddRef.current.textContent = formatPercent(data.drawdown_pct, false);
+      ddRef.current.className = `text-base font-bold ${
+        data.drawdown_pct < 0 ? 'text-rose-400' : 'text-slate-400'
+      }`;
     }
   }, []);
 
@@ -297,7 +322,8 @@ export const PerformanceAuditView: React.FC = () => {
                   stroke="#64748b"
                   fontSize={11}
                   tickLine={false}
-                  minTickGap={35}
+                  minTickGap={45}
+                  tickFormatter={formatXTick}
                   hide={showVolume}
                 />
                 <YAxis
@@ -305,14 +331,22 @@ export const PerformanceAuditView: React.FC = () => {
                   stroke="#64748b"
                   fontSize={11}
                   domain={priceDomain as [number, number]}
-                  tickFormatter={(v) => `$${v.toLocaleString()}`}
+                  allowDecimals={false}
+                  tickFormatter={(v) => formatAxisPrice(v)}
                   orientation="right"
+                  width={80}
                 />
 
                 <Tooltip
                   isAnimationActive={false}
                   cursor={{ stroke: '#6366f1', strokeWidth: 1.5, strokeDasharray: '3 3' }}
-                  content={<FastTooltipBridge onInspect={updateInspectorDOM} showOHLC={true} />}
+                  content={
+                    <FastTooltipBridge
+                      onInspect={updateInspectorDOM}
+                      showOHLC={true}
+                      timeframe={params.timeframe}
+                    />
+                  }
                 />
 
                 {chartMode === 'candles' && (
@@ -344,7 +378,7 @@ export const PerformanceAuditView: React.FC = () => {
                     strokeDasharray="4 4"
                     strokeWidth={1.5}
                     label={{
-                      value: `SL: $${results.active_position.stop_loss.toFixed(2)}`,
+                      value: `SL: ${formatAdaptivePrice(results.active_position.stop_loss)}`,
                       fill: '#f43f5e',
                       position: 'left',
                       fontSize: 10,
@@ -360,7 +394,7 @@ export const PerformanceAuditView: React.FC = () => {
                     strokeDasharray="4 4"
                     strokeWidth={1.5}
                     label={{
-                      value: `TP: $${results.active_position.take_profit.toFixed(2)}`,
+                      value: `TP: ${formatAdaptivePrice(results.active_position.take_profit)}`,
                       fill: '#10b981',
                       position: 'left',
                       fontSize: 10,
@@ -395,18 +429,27 @@ export const PerformanceAuditView: React.FC = () => {
                     stroke="#64748b"
                     fontSize={11}
                     tickLine={false}
-                    minTickGap={35}
+                    minTickGap={45}
+                    tickFormatter={formatXTick}
                   />
                   <YAxis
                     stroke="#64748b"
                     fontSize={10}
                     orientation="right"
-                    tickFormatter={(v) => (v >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : v >= 1e3 ? `${(v / 1e3).toFixed(0)}k` : `${v}`)}
+                    allowDecimals={false}
+                    tickFormatter={(v) => formatCompactVolume(v)}
+                    width={80}
                   />
                   <Tooltip
                     isAnimationActive={false}
                     cursor={{ stroke: '#6366f1', strokeWidth: 1.5, strokeDasharray: '3 3' }}
-                    content={<FastTooltipBridge onInspect={updateInspectorDOM} showOHLC={false} />}
+                    content={
+                      <FastTooltipBridge
+                        onInspect={updateInspectorDOM}
+                        showOHLC={false}
+                        timeframe={params.timeframe}
+                      />
+                    }
                   />
                   <Bar dataKey="volume" isAnimationActive={false}>
                     {visibleTimeline.map((entry, index) => (
@@ -476,13 +519,34 @@ export const PerformanceAuditView: React.FC = () => {
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                <XAxis dataKey="time" stroke="#64748b" fontSize={11} tickLine={false} minTickGap={35} />
-                <YAxis stroke="#64748b" fontSize={11} domain={['auto', 'auto']} tickFormatter={(v) => `$${v.toLocaleString()}`} orientation="right" />
+                <XAxis
+                  dataKey="time"
+                  stroke="#64748b"
+                  fontSize={11}
+                  tickLine={false}
+                  minTickGap={45}
+                  tickFormatter={formatXTick}
+                />
+                <YAxis
+                  stroke="#64748b"
+                  fontSize={11}
+                  domain={['auto', 'auto']}
+                  allowDecimals={false}
+                  tickFormatter={(v) => formatCompactCurrency(v)}
+                  orientation="right"
+                  width={80}
+                />
 
                 <Tooltip
                   isAnimationActive={false}
                   cursor={{ stroke: '#6366f1', strokeWidth: 1.5, strokeDasharray: '3 3' }}
-                  content={<FastTooltipBridge onInspect={updateInspectorDOM} showOHLC={false} />}
+                  content={
+                    <FastTooltipBridge
+                      onInspect={updateInspectorDOM}
+                      showOHLC={false}
+                      timeframe={params.timeframe}
+                    />
+                  }
                 />
 
                 <Area
