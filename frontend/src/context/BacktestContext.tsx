@@ -28,13 +28,35 @@ interface BacktestContextType {
   strategies: StrategyMetadata[];
   presets: StrategyPreset[];
   selectedPreset: string;
-  runSimulation: (overrideParams?: BacktestParams) => Promise<void>;
+  runSimulation: (overrideParams?: BacktestParams, forceRefresh?: boolean) => Promise<void>;
   selectAsset: (symbol: string) => void;
+  setTimeframe: (timeframe: string) => void;
   applyPreset: (presetName: string) => void;
   reloadPresets: () => Promise<void>;
 }
 
 const BacktestContext = createContext<BacktestContextType | null>(null);
+
+const getCacheKey = (p: BacktestParams): string => {
+  return [
+    p.symbol,
+    p.timeframe || '1d',
+    p.start_date,
+    p.end_date,
+    p.strategy_id,
+    p.initial_capital,
+    p.risk_fraction,
+    p.atr_multiplier_sl,
+    p.atr_multiplier_tp,
+    p.commission_bps,
+    p.commission_fixed,
+    p.slippage_bps,
+    p.gap_slippage_enabled,
+    p.num_simulations,
+    p.ruin_threshold_pct,
+    JSON.stringify(p.strategy_params || {}),
+  ].join('|');
+};
 
 export const BacktestProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [activeTab, setActiveTab] = useState<WorkspaceTab>('studio');
@@ -49,6 +71,7 @@ export const BacktestProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const [params, setParams] = useState<BacktestParams>({
     symbol: 'BTC-USD',
+    timeframe: '1d',
     start_date: defaultDates.start_date,
     end_date: defaultDates.end_date,
     initial_capital: 100000,
@@ -73,13 +96,14 @@ export const BacktestProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   });
 
   const [lastRunParams, setLastRunParams] = useState<BacktestParams | null>(null);
+  const resultsCache = useRef<Map<string, BacktestResult>>(new Map());
   const hasAutoInitialized = useRef(false);
 
-  // Computes whether the current input parameters differ from the active backtest results
   const isDirty = useMemo(() => {
     if (!lastRunParams) return false;
     return (
       params.symbol !== lastRunParams.symbol ||
+      params.timeframe !== lastRunParams.timeframe ||
       params.start_date !== lastRunParams.start_date ||
       params.end_date !== lastRunParams.end_date ||
       params.strategy_id !== lastRunParams.strategy_id ||
@@ -88,30 +112,46 @@ export const BacktestProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     );
   }, [params, lastRunParams]);
 
-  const runSimulation = useCallback(async (overrideParams?: BacktestParams) => {
-    const activeParams = overrideParams || params;
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await axios.post('http://127.0.0.1:8000/api/backtest/run', activeParams);
-      setResults(response.data);
-      setLastRunParams(JSON.parse(JSON.stringify(activeParams)));
-    } catch (err: any) {
-      const detail = err.response?.data?.detail;
-      if (Array.isArray(detail)) {
-        const formatted = detail
-          .map((d: any) => `${d.loc?.filter((l: string) => l !== 'body').join('.') || 'Error'}: ${d.msg}`)
-          .join(' | ');
-        setError(formatted);
-      } else if (typeof detail === 'string') {
-        setError(detail);
-      } else {
-        setError(err.message || 'Backtest simulation failed');
+  const runSimulation = useCallback(
+    async (overrideParams?: BacktestParams, forceRefresh: boolean = false) => {
+      const activeParams = overrideParams || params;
+      const cacheKey = getCacheKey(activeParams);
+
+      // Instant client-side cache return if parameters match a previous run
+      if (!forceRefresh && resultsCache.current.has(cacheKey)) {
+        const cached = resultsCache.current.get(cacheKey)!;
+        setResults(cached);
+        setLastRunParams(JSON.parse(JSON.stringify(activeParams)));
+        setError(null);
+        return;
       }
-    } finally {
-      setLoading(false);
-    }
-  }, [params]);
+
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await axios.post('http://127.0.0.1:8000/api/backtest/run', activeParams);
+        const data = response.data;
+        resultsCache.current.set(cacheKey, data);
+        setResults(data);
+        setLastRunParams(JSON.parse(JSON.stringify(activeParams)));
+      } catch (err: any) {
+        const detail = err.response?.data?.detail;
+        if (Array.isArray(detail)) {
+          const formatted = detail
+            .map((d: any) => `${d.loc?.filter((l: string) => l !== 'body').join('.') || 'Error'}: ${d.msg}`)
+            .join(' | ');
+          setError(formatted);
+        } else if (typeof detail === 'string') {
+          setError(detail);
+        } else {
+          setError(err.message || 'Backtest simulation failed');
+        }
+      } finally {
+        setLoading(false);
+      }
+    },
+    [params]
+  );
 
   const loadMetadata = useCallback(async () => {
     try {
@@ -137,6 +177,10 @@ export const BacktestProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const selectAsset = (symbol: string) => {
     setParams((prev) => ({ ...prev, symbol }));
+  };
+
+  const setTimeframe = (timeframe: string) => {
+    setParams((prev) => ({ ...prev, timeframe }));
   };
 
   const applyPreset = (presetName: string) => {
@@ -177,6 +221,7 @@ export const BacktestProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         selectedPreset,
         runSimulation,
         selectAsset,
+        setTimeframe,
         applyPreset,
         reloadPresets: loadMetadata,
       }}

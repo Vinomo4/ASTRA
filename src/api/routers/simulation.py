@@ -1,6 +1,8 @@
 # src/api/routers/simulation.py
 from __future__ import annotations
 
+from datetime import datetime
+from typing import Any
 import pandas as pd
 from fastapi import APIRouter, HTTPException
 
@@ -28,35 +30,75 @@ from src.strategies import StrategyRegistry
 
 router = APIRouter()
 
+# In-memory LRU session cache for raw dataframes (RAM tier)
+_DATA_CACHE: dict[tuple[str, str, str, str], pd.DataFrame] = {}
+
+
+def get_market_data(
+    symbol: str,
+    start_date: str,
+    end_date: str,
+    timeframe: str,
+    storage: StorageManager,
+    loader: YFinanceLoader,
+) -> pd.DataFrame:
+    cache_key = (symbol, start_date, end_date, timeframe)
+    if cache_key in _DATA_CACHE:
+        return _DATA_CACHE[cache_key].copy()
+
+    # 1. Check local DuckDB storage for cached historical bars
+    df = storage.load_ohlcv(symbol, start_date, end_date, timeframe=timeframe)
+
+    # 2. If storage cache misses, fetch via network and persist to DuckDB
+    if df.empty:
+        df = loader.fetch_ohlcv(symbol, start_date, end_date, timeframe=timeframe)
+        try:
+            storage.save_ohlcv(df, timeframe=timeframe)
+        except Exception:
+            pass  # Non-blocking storage cache write
+
+    if not df.empty:
+        _DATA_CACHE[cache_key] = df.copy()
+
+    return df
+
 
 @router.post("/run", response_model=BacktestResponse)
 async def run_backtest(req: BacktestRequest) -> BacktestResponse:
     storage = StorageManager()
+    loader = YFinanceLoader()
+    timeframe = getattr(req, "timeframe", "1d") or "1d"
 
-    # 1. Fetch / Load Market Data
-    df = storage.load_ohlcv(req.symbol, req.start_date, req.end_date)
-    if df.empty:
-        loader = YFinanceLoader()
-        try:
-            df = loader.fetch_ohlcv(req.symbol, req.start_date, req.end_date)
-            storage.save_ohlcv(df)
-        except Exception as exc:
-            raise HTTPException(
-                status_code=400, detail=f"Failed to fetch market data: {exc}"
-            ) from exc
+    # 1. Fetch / Load Market Data via Tiered Cache (RAM -> DuckDB -> Network)
+    try:
+        df = get_market_data(
+            symbol=req.symbol,
+            start_date=req.start_date,
+            end_date=req.end_date,
+            timeframe=timeframe,
+            storage=storage,
+            loader=loader,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to fetch market data for {req.symbol} ({timeframe}): {exc}",
+        ) from exc
 
     if df.empty:
         raise HTTPException(
-            status_code=404,
-            detail=f"No market data found for symbol {req.symbol} in the requested range.",
+            status_code=400, detail=f"No data returned for {req.symbol} with timeframe {timeframe}"
         )
 
     # 2. Polymorphic Strategy Instantiation
     strategy_params = dict(req.strategy_params)
-    if "fast_ema" not in strategy_params and req.fast_ema is not None:
-        strategy_params["fast_ema"] = req.fast_ema
-    if "slow_ema" not in strategy_params and req.slow_ema is not None:
-        strategy_params["slow_ema"] = req.slow_ema
+    fast_ema = getattr(req, "fast_ema", None)
+    if "fast_ema" not in strategy_params and fast_ema is not None:
+        strategy_params["fast_ema"] = fast_ema
+
+    slow_ema = getattr(req, "slow_ema", None)
+    if "slow_ema" not in strategy_params and slow_ema is not None:
+        strategy_params["slow_ema"] = slow_ema
 
     try:
         strategy = StrategyRegistry.create(req.strategy_id, **strategy_params)
@@ -65,7 +107,7 @@ async def run_backtest(req: BacktestRequest) -> BacktestResponse:
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=f"Invalid strategy parameters: {exc}") from exc
 
-    # 3. Run Backtest Engine
+    # 3. Run Event-Driven Backtest Engine
     engine = BacktestEngine(
         strategy=strategy,
         initial_capital=req.initial_capital,
@@ -80,7 +122,7 @@ async def run_backtest(req: BacktestRequest) -> BacktestResponse:
 
     results = engine.run(df)
 
-    # 4. Compute Benchmark Curve
+    # 4. Compute Benchmark Metrics & Curve
     sorted_df = df.sort_values("timestamp").reset_index(drop=True)
     initial_close = float(sorted_df.iloc[0]["close"])
     benchmark_shares = req.initial_capital / initial_close
@@ -122,34 +164,40 @@ async def run_backtest(req: BacktestRequest) -> BacktestResponse:
         confidence_bands=[SimulationBandPoint(**b) for b in mc_output.confidence_bands],
     )
 
-    benchmark_curve = [
-        BenchmarkPoint(
-            time=row["timestamp"].strftime("%Y-%m-%d")
-            if hasattr(row["timestamp"], "strftime")
-            else str(row["timestamp"]),
-            equity=round(float(row["close"] * benchmark_shares), 2),
-            return_pct=round(float((row["close"] / initial_close - 1.0) * 100), 2),
-        )
-        for _, row in sorted_df.iterrows()
-    ]
+    # 6. Vectorized Serialization (Replaces slow .iterrows() loops)
+    is_intraday = timeframe in ("15m", "1h", "4h", "5m")
+    time_fmt = "%Y-%m-%d %H:%M" if is_intraday else "%Y-%m-%d"
+
+    # Fast OHLC Serialization
+    ts_strings = pd.to_datetime(df["timestamp"]).dt.strftime(time_fmt).tolist()
+    opens = df["open"].astype(float).tolist()
+    highs = df["high"].astype(float).tolist()
+    lows = df["low"].astype(float).tolist()
+    closes = df["close"].astype(float).tolist()
+    volumes = df["volume"].astype(float).tolist()
 
     ohlc_history = [
-        OHLCPoint(
-            time=row["timestamp"].strftime("%Y-%m-%d")
-            if hasattr(row["timestamp"], "strftime")
-            else str(row["timestamp"]),
-            open=round(float(row["open"]), 2),
-            high=round(float(row["high"]), 2),
-            low=round(float(row["low"]), 2),
-            close=round(float(row["close"]), 2),
-            volume=round(float(row["volume"]), 2),
-        )
-        for _, row in sorted_df.iterrows()
+        OHLCPoint(time=t, open=o, high=h, low=l, close=c, volume=v)
+        for t, o, h, l, c, v in zip(ts_strings, opens, highs, lows, closes, volumes)
     ]
 
+    # Fast Benchmark Curve Serialization
+    bench_ts_strings = pd.to_datetime(sorted_df["timestamp"]).dt.strftime(time_fmt).tolist()
+    bench_closes = sorted_df["close"].astype(float).tolist()
+
+    benchmark_curve = [
+        BenchmarkPoint(
+            time=t,
+            equity=round(c * benchmark_shares, 2),
+            return_pct=round(((c / initial_close) - 1.0) * 100, 2),
+        )
+        for t, c in zip(bench_ts_strings, bench_closes)
+    ]
+
+    # Equity Curve Serialization
     equity_points = [
         EquityPoint(
-            time=ts.strftime("%Y-%m-%d") if hasattr(ts, "strftime") else str(ts),
+            time=ts.strftime(time_fmt) if isinstance(ts, (pd.Timestamp, datetime)) else str(ts),
             value=float(val),
         )
         for ts, val in results["equity_curve"].items()
@@ -166,10 +214,10 @@ async def run_backtest(req: BacktestRequest) -> BacktestResponse:
             trade_id=t.trade_id,
             symbol=t.symbol,
             side=t.side if isinstance(t.side, str) else t.side.value,
-            entry_time=t.entry_time.strftime("%Y-%m-%d")
+            entry_time=t.entry_time.strftime(time_fmt)
             if hasattr(t.entry_time, "strftime")
             else str(t.entry_time),
-            exit_time=t.exit_time.strftime("%Y-%m-%d")
+            exit_time=t.exit_time.strftime(time_fmt)
             if hasattr(t.exit_time, "strftime")
             else str(t.exit_time),
             entry_price=round(float(t.entry_price), 2),

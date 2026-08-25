@@ -1,10 +1,11 @@
 // src/components/views/PerformanceAuditView.tsx
-import React, { useMemo, useCallback, useRef } from 'react';
-import { BarChart2, TrendingUp, AlertCircle } from 'lucide-react';
+import React, { useMemo, useCallback, useRef, useState } from 'react';
+import { BarChart2, TrendingUp, AlertCircle, RefreshCw, BarChart, ZoomIn } from 'lucide-react';
 import {
   ResponsiveContainer,
   ComposedChart,
   AreaChart,
+  BarChart as RechartsBarChart,
   Area,
   Bar,
   Line,
@@ -14,6 +15,7 @@ import {
   CartesianGrid,
   ReferenceDot,
   ReferenceLine,
+  Cell,
 } from 'recharts';
 
 import type { UnifiedDataPoint } from '../../types';
@@ -27,8 +29,28 @@ import { CandlestickShape } from '../charts/CandlestickShape';
 import { ExecutionMarkerShape } from '../charts/ExecutionMarkerShape';
 import { FastTooltipBridge } from '../charts/FastTooltipBridge';
 
+const TIMEFRAME_OPTIONS = [
+  { label: '15m', value: '15m' },
+  { label: '1H', value: '1h' },
+  { label: '4H', value: '4h' },
+  { label: '1D', value: '1d' },
+  { label: '1W', value: '1wk' },
+];
+
+const ZOOM_OPTIONS = [
+  { label: '50 Bars', count: 50 },
+  { label: '100 Bars', count: 100 },
+  { label: '250 Bars', count: 250 },
+  { label: 'All Bars', count: 0 },
+];
+
 export const PerformanceAuditView: React.FC = () => {
-  const { results, setActiveTab } = useBacktest();
+  const { results, params, setTimeframe, runSimulation, loading, setActiveTab } = useBacktest();
+
+  // Chart configuration: default to all bars and candlesticks
+  const [chartMode, setChartMode] = useState<'candles' | 'line'>('candles');
+  const [showVolume, setShowVolume] = useState<boolean>(true);
+  const [zoomBars, setZoomBars] = useState<number>(0);
 
   const badgeRef = useRef<HTMLSpanElement>(null);
   const dateRef = useRef<HTMLSpanElement>(null);
@@ -39,7 +61,7 @@ export const PerformanceAuditView: React.FC = () => {
   const pnlRef = useRef<HTMLParagraphElement>(null);
   const ddRef = useRef<HTMLParagraphElement>(null);
 
-  const unifiedTimeline: UnifiedDataPoint[] = useMemo(() => {
+  const fullTimeline = useMemo(() => {
     if (!results || !results.snapshots || !results.ohlc_history) return [];
     const snapMap = new Map(results.snapshots.map((s) => [s.time, s]));
     const benchMap = new Map((results.benchmark_curve || []).map((b) => [b.time, b.equity]));
@@ -54,6 +76,8 @@ export const PerformanceAuditView: React.FC = () => {
         drawdown_pct: 0,
       };
 
+      const isUp = bar.close >= bar.open;
+
       return {
         time: bar.time,
         open: bar.open,
@@ -61,6 +85,7 @@ export const PerformanceAuditView: React.FC = () => {
         low: bar.low,
         close: bar.close,
         volume: bar.volume,
+        isUp,
         equity: snap.equity ?? 0,
         benchmark_equity: benchMap.get(bar.time) ?? results.initial_capital,
         cash: snap.cash ?? 0,
@@ -72,7 +97,14 @@ export const PerformanceAuditView: React.FC = () => {
     });
   }, [results]);
 
-  const updateInspectorDOM = useCallback((data: UnifiedDataPoint, isHover: boolean) => {
+  const visibleTimeline = useMemo(() => {
+    if (zoomBars <= 0 || fullTimeline.length <= zoomBars) {
+      return fullTimeline;
+    }
+    return fullTimeline.slice(-zoomBars);
+  }, [fullTimeline, zoomBars]);
+
+  const updateInspectorDOM = useCallback((data: any, isHover: boolean) => {
     if (!data) return;
 
     if (badgeRef.current) {
@@ -97,25 +129,38 @@ export const PerformanceAuditView: React.FC = () => {
   }, []);
 
   const handleMouseLeaveContainer = useCallback(() => {
-    if (unifiedTimeline.length > 0) {
-      updateInspectorDOM(unifiedTimeline[unifiedTimeline.length - 1], false);
+    if (visibleTimeline.length > 0) {
+      updateInspectorDOM(visibleTimeline[visibleTimeline.length - 1], false);
     }
-  }, [unifiedTimeline, updateInspectorDOM]);
+  }, [visibleTimeline, updateInspectorDOM]);
 
   const priceDomain = useMemo(() => {
-    if (unifiedTimeline.length === 0) return [0, 100];
-    const minLow = Math.min(...unifiedTimeline.map((d) => d.low));
-    const maxHigh = Math.max(...unifiedTimeline.map((d) => d.high));
-    const padding = (maxHigh - minLow) * 0.05;
+    if (visibleTimeline.length === 0) return [0, 100];
+    const minLow = Math.min(...visibleTimeline.map((d) => d.low));
+    const maxHigh = Math.max(...visibleTimeline.map((d) => d.high));
+    const padding = (maxHigh - minLow) * 0.06;
     return [Math.max(0, minLow - padding), maxHigh + padding];
-  }, [unifiedTimeline]);
+  }, [visibleTimeline]);
+
+  const visibleMarkers = useMemo(() => {
+    if (!results || !results.execution_markers) return [];
+    if (visibleTimeline.length === 0) return [];
+    const startTime = visibleTimeline[0].time;
+    const endTime = visibleTimeline[visibleTimeline.length - 1].time;
+    return results.execution_markers.filter((m) => m.time >= startTime && m.time <= endTime);
+  }, [results, visibleTimeline]);
 
   const renderCandle = useCallback(
     (props: any) => <CandlestickShape {...props} priceDomain={priceDomain} />,
     [priceDomain]
   );
 
-  const initialSnapshot = unifiedTimeline.length > 0 ? unifiedTimeline[unifiedTimeline.length - 1] : null;
+  const handleTimeframeSelect = async (tf: string) => {
+    setTimeframe(tf);
+    await runSimulation({ ...params, timeframe: tf });
+  };
+
+  const initialSnapshot = visibleTimeline.length > 0 ? (visibleTimeline[visibleTimeline.length - 1] as any) : null;
 
   if (!results) {
     return (
@@ -141,40 +186,127 @@ export const PerformanceAuditView: React.FC = () => {
       <TradeAnalyticsPanel analytics={results.trade_analytics} trades={results.trades} />
 
       <div onMouseLeave={handleMouseLeaveContainer}>
-        {/* Candlestick Execution Chart */}
-        <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl mb-6">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
-            <h2 className="text-base font-semibold text-white flex items-center gap-2">
-              <BarChart2 size={18} className="text-emerald-400" /> Price Action Candlesticks & Executions ({results.symbol})
-            </h2>
+        {/* Main Price Action & Execution Chart Container */}
+        <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl mb-6 shadow-xl">
+          {/* Top Header Toolbar */}
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-4 pb-4 border-b border-slate-800/80">
+            <div className="flex items-center gap-3">
+              <BarChart2 size={20} className="text-emerald-400" />
+              <div>
+                <h2 className="text-base font-semibold text-white">
+                  Price Action & Executions ({results.symbol})
+                </h2>
+                <span className="text-xs text-slate-500">
+                  Resolution: {params.timeframe || '1d'} • {fullTimeline.length} Total Bars
+                </span>
+              </div>
+            </div>
 
+            {/* Main Action Controls */}
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Timeframe Selector */}
+              <div className="flex items-center bg-slate-950 p-1 rounded-lg border border-slate-800">
+                {TIMEFRAME_OPTIONS.map((tf) => (
+                  <button
+                    key={tf.value}
+                    type="button"
+                    disabled={loading}
+                    onClick={() => handleTimeframeSelect(tf.value)}
+                    className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all ${
+                      (params.timeframe || '1d') === tf.value
+                        ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                    }`}
+                  >
+                    {tf.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* View Mode */}
+              <div className="flex items-center bg-slate-950 p-1 rounded-lg border border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setChartMode('candles')}
+                  className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
+                    chartMode === 'candles'
+                      ? 'bg-indigo-600/30 text-indigo-300 border border-indigo-500/40'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                  }`}
+                >
+                  Candlesticks
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setChartMode('line')}
+                  className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
+                    chartMode === 'line'
+                      ? 'bg-indigo-600/30 text-indigo-300 border border-indigo-500/40'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                  }`}
+                >
+                  Line
+                </button>
+              </div>
+
+              {/* Volume Toggle Button */}
+              <button
+                type="button"
+                onClick={() => setShowVolume((prev) => !prev)}
+                className={`flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-lg border transition-all ${
+                  showVolume
+                    ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
+                    : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200'
+                }`}
+              >
+                <BarChart size={13} />
+                Volume
+              </button>
+
+              {loading && (
+                <span className="flex items-center gap-1.5 text-xs text-amber-400 bg-amber-400/10 px-2.5 py-1 rounded-lg border border-amber-400/20">
+                  <RefreshCw size={12} className="animate-spin" /> Fetching...
+                </span>
+              )}
+            </div>
+
+            {/* Execution Legend */}
             <div className="flex flex-wrap items-center gap-4 text-xs font-semibold">
               <span className="flex items-center gap-1.5 text-emerald-400">
-                <span className="inline-block w-0 h-0 border-x-[5px] border-x-transparent border-b-[9px] border-b-emerald-400"></span> Buy Entry
+                <span className="inline-block w-0 h-0 border-x-[5px] border-x-transparent border-b-[9px] border-b-emerald-400"></span> Buy
               </span>
               <span className="flex items-center gap-1.5 text-emerald-300">
-                <span className="inline-block w-2.5 h-2.5 bg-emerald-400 rotate-45"></span> Take Profit
+                <span className="inline-block w-2.5 h-2.5 bg-emerald-400 rotate-45"></span> TP
               </span>
               <span className="flex items-center gap-1.5 text-rose-400">
-                <span className="inline-block w-0 h-0 border-x-[5px] border-x-transparent border-t-[9px] border-t-rose-500"></span> Stop Loss
+                <span className="inline-block w-0 h-0 border-x-[5px] border-x-transparent border-t-[9px] border-t-rose-500"></span> SL
               </span>
               <span className="flex items-center gap-1.5 text-indigo-400">
-                <span className="inline-block w-2.5 h-2.5 bg-indigo-400 rounded-sm"></span> Signal Exit
+                <span className="inline-block w-2.5 h-2.5 bg-indigo-400 rounded-sm"></span> Exit
               </span>
             </div>
           </div>
 
-          <div className="h-80 w-full">
+          {/* Primary Chart Canvas */}
+          <div className={showVolume ? 'h-72 w-full' : 'h-88 w-full'}>
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart syncId="portfolioSync" data={unifiedTimeline}>
+              <ComposedChart syncId="portfolioSync" data={visibleTimeline}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                <XAxis dataKey="time" stroke="#64748b" fontSize={12} tickLine={false} />
+                <XAxis
+                  dataKey="time"
+                  stroke="#64748b"
+                  fontSize={11}
+                  tickLine={false}
+                  minTickGap={35}
+                  hide={showVolume}
+                />
                 <YAxis
                   yAxisId="price"
                   stroke="#64748b"
-                  fontSize={12}
+                  fontSize={11}
                   domain={priceDomain as [number, number]}
                   tickFormatter={(v) => `$${v.toLocaleString()}`}
+                  orientation="right"
                 />
 
                 <Tooltip
@@ -183,23 +315,26 @@ export const PerformanceAuditView: React.FC = () => {
                   content={<FastTooltipBridge onInspect={updateInspectorDOM} showOHLC={true} />}
                 />
 
-                <Line
-                  yAxisId="price"
-                  type="monotone"
-                  dataKey="close"
-                  stroke="transparent"
-                  strokeWidth={0}
-                  dot={false}
-                  activeDot={false}
-                  isAnimationActive={false}
-                />
+                {chartMode === 'candles' && (
+                  <Bar
+                    yAxisId="price"
+                    dataKey="close"
+                    shape={renderCandle}
+                    isAnimationActive={false}
+                  />
+                )}
 
-                <Bar
-                  yAxisId="price"
-                  dataKey="close"
-                  shape={renderCandle}
-                  isAnimationActive={false}
-                />
+                {chartMode === 'line' && (
+                  <Line
+                    yAxisId="price"
+                    type="monotone"
+                    dataKey="close"
+                    stroke="#38bdf8"
+                    strokeWidth={2}
+                    dot={false}
+                    isAnimationActive={false}
+                  />
+                )}
 
                 {results.active_position?.stop_loss && (
                   <ReferenceLine
@@ -211,7 +346,7 @@ export const PerformanceAuditView: React.FC = () => {
                     label={{
                       value: `SL: $${results.active_position.stop_loss.toFixed(2)}`,
                       fill: '#f43f5e',
-                      position: 'right',
+                      position: 'left',
                       fontSize: 10,
                     }}
                   />
@@ -227,13 +362,13 @@ export const PerformanceAuditView: React.FC = () => {
                     label={{
                       value: `TP: $${results.active_position.take_profit.toFixed(2)}`,
                       fill: '#10b981',
-                      position: 'right',
+                      position: 'left',
                       fontSize: 10,
                     }}
                   />
                 )}
 
-                {results.execution_markers.map((marker, idx) => (
+                {visibleMarkers.map((marker, idx) => (
                   <ReferenceDot
                     key={`${marker.time}-${idx}-${marker.side}`}
                     yAxisId="price"
@@ -245,10 +380,78 @@ export const PerformanceAuditView: React.FC = () => {
               </ComposedChart>
             </ResponsiveContainer>
           </div>
+
+          {/* Sub-Pane: Trading Volume */}
+          {showVolume && (
+            <div className="h-28 w-full pt-2 border-t border-slate-800/60 mt-2">
+              <div className="text-[11px] font-semibold text-slate-400 mb-1 flex items-center gap-1.5">
+                <BarChart size={12} className="text-slate-500" /> Trading Volume
+              </div>
+              <ResponsiveContainer width="100%" height="80%">
+                <RechartsBarChart syncId="portfolioSync" data={visibleTimeline}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                  <XAxis
+                    dataKey="time"
+                    stroke="#64748b"
+                    fontSize={11}
+                    tickLine={false}
+                    minTickGap={35}
+                  />
+                  <YAxis
+                    stroke="#64748b"
+                    fontSize={10}
+                    orientation="right"
+                    tickFormatter={(v) => (v >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : v >= 1e3 ? `${(v / 1e3).toFixed(0)}k` : `${v}`)}
+                  />
+                  <Tooltip
+                    isAnimationActive={false}
+                    cursor={{ stroke: '#6366f1', strokeWidth: 1.5, strokeDasharray: '3 3' }}
+                    content={<FastTooltipBridge onInspect={updateInspectorDOM} showOHLC={false} />}
+                  />
+                  <Bar dataKey="volume" isAnimationActive={false}>
+                    {visibleTimeline.map((entry, index) => (
+                      <Cell
+                        key={`cell-${index}`}
+                        fill={entry.isUp ? '#10b981' : '#f43f5e'}
+                        fillOpacity={0.65}
+                      />
+                    ))}
+                  </Bar>
+                </RechartsBarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
+          {/* Dedicated Bottom Footer: Zoom Window Selector */}
+          <div className="flex items-center justify-between pt-3 mt-3 border-t border-slate-800/70 text-xs text-slate-400">
+            <span className="text-[11px] text-slate-500">
+              Showing <span className="text-slate-300 font-medium">{visibleTimeline.length}</span> of <span className="text-slate-300 font-medium">{fullTimeline.length}</span> bars
+            </span>
+
+            <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-lg border border-slate-800">
+              <span className="text-[11px] text-slate-500 px-1.5 flex items-center gap-1">
+                <ZoomIn size={12} /> Range:
+              </span>
+              {ZOOM_OPTIONS.map((z) => (
+                <button
+                  key={z.label}
+                  type="button"
+                  onClick={() => setZoomBars(z.count)}
+                  className={`px-2 py-0.5 text-xs rounded-md transition-all ${
+                    zoomBars === z.count
+                      ? 'bg-slate-800 text-emerald-400 font-semibold shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  {z.label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
-        {/* Equity Curve Area Chart */}
-        <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl mb-6">
+        {/* Strategy Equity vs. Benchmark Curve */}
+        <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl mb-6 shadow-xl">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
             <h2 className="text-base font-semibold text-white flex items-center gap-2">
               <TrendingUp size={18} className="text-emerald-400" /> Strategy Equity vs. Buy & Hold Benchmark
@@ -265,16 +468,16 @@ export const PerformanceAuditView: React.FC = () => {
 
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart syncId="portfolioSync" data={unifiedTimeline}>
+              <AreaChart syncId="portfolioSync" data={visibleTimeline}>
                 <defs>
                   <linearGradient id="colorEquity" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="#10b981" stopOpacity={0.0}/>
+                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#10b981" stopOpacity={0.0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                <XAxis dataKey="time" stroke="#64748b" fontSize={12} tickLine={false} />
-                <YAxis stroke="#64748b" fontSize={12} domain={['auto', 'auto']} tickFormatter={(v) => `$${v.toLocaleString()}`} />
+                <XAxis dataKey="time" stroke="#64748b" fontSize={11} tickLine={false} minTickGap={35} />
+                <YAxis stroke="#64748b" fontSize={11} domain={['auto', 'auto']} tickFormatter={(v) => `$${v.toLocaleString()}`} orientation="right" />
 
                 <Tooltip
                   isAnimationActive={false}

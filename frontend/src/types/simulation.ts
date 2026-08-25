@@ -4,24 +4,19 @@ export type ActiveTab = WorkspaceTab;
 
 export interface BacktestParams {
   symbol: string;
+  timeframe?: string;
   start_date: string;
   end_date: string;
   initial_capital: number;
-
   strategy_id: string;
   strategy_params: Record<string, any>;
-
-  fast_ema?: number;
-  slow_ema?: number;
-  risk_fraction: number;
-  atr_multiplier_sl: number;
-  atr_multiplier_tp: number;
-
-  commission_bps: number;
-  commission_fixed: number;
-  slippage_bps: number;
-  gap_slippage_enabled: boolean;
-
+  risk_fraction?: number;
+  atr_multiplier_sl?: number;
+  atr_multiplier_tp?: number;
+  commission_bps?: number;
+  commission_fixed?: number;
+  slippage_bps?: number;
+  gap_slippage_enabled?: boolean;
   num_simulations?: number;
   ruin_threshold_pct?: number;
 }

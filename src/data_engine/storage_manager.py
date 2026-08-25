@@ -22,15 +22,24 @@ class StorageManager:
                 CREATE TABLE IF NOT EXISTS ohlcv (
                     timestamp TIMESTAMP,
                     symbol VARCHAR,
+                    timeframe VARCHAR DEFAULT '1d',
                     open DOUBLE,
                     high DOUBLE,
                     low DOUBLE,
                     close DOUBLE,
                     volume DOUBLE,
-                    PRIMARY KEY (timestamp, symbol)
+                    PRIMARY KEY (timestamp, symbol, timeframe)
                 )
                 """
             )
+            # Automatic schema migration for existing databases missing the timeframe column
+            try:
+                conn.execute(
+                    "ALTER TABLE ohlcv ADD COLUMN IF NOT EXISTS timeframe VARCHAR DEFAULT '1d'"
+                )
+            except Exception:
+                pass
+
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS strategy_presets (
@@ -51,30 +60,41 @@ class StorageManager:
                 """
             )
 
-    def save_ohlcv(self, df: pd.DataFrame) -> None:
+    def save_ohlcv(self, df: pd.DataFrame, timeframe: str = "1d") -> None:
         if df.empty:
             return
         data = df.copy()
+        if "timeframe" not in data.columns:
+            data["timeframe"] = timeframe
         data["timestamp"] = pd.to_datetime(data["timestamp"])
+
         with duckdb.connect(self.db_path) as conn:
+            conn.register("df_view", data)
             conn.execute(
                 """
                 INSERT OR REPLACE INTO ohlcv
-                SELECT timestamp, symbol, open, high, low, close, volume FROM data
+                SELECT timestamp, symbol, timeframe, open, high, low, close, volume FROM df_view
                 """
             )
 
-    def load_ohlcv(self, symbol: str, start_date: str, end_date: str) -> pd.DataFrame:
+    def load_ohlcv(
+        self,
+        symbol: str,
+        start_date: str,
+        end_date: str,
+        timeframe: str = "1d",
+    ) -> pd.DataFrame:
         query = """
-            SELECT timestamp, symbol, open, high, low, close, volume
+            SELECT timestamp, symbol, timeframe, open, high, low, close, volume
             FROM ohlcv
             WHERE symbol = ?
+              AND timeframe = ?
               AND timestamp >= ?
               AND timestamp <= ?
             ORDER BY timestamp ASC
         """
         with duckdb.connect(self.db_path) as conn:
-            return conn.execute(query, [symbol, start_date, end_date]).df()
+            return conn.execute(query, [symbol, timeframe, start_date, end_date]).df()
 
     # --- Strategy Preset CRUD Methods ---
 
