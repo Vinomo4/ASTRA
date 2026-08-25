@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 
-from src.api.schemas.backtest_schemas import ComparisonRequest, ComparisonResponse
+from src.api.schemas import ComparisonRequest, ComparisonResponse
 from src.backtester.comparator import ComparatorEngine
 
 router = APIRouter()

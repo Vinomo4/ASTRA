@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 
-from src.api.schemas.backtest_schemas import WalkForwardRequest, WalkForwardResponse
+from src.api.schemas import WalkForwardRequest, WalkForwardResponse
 from src.backtester.walk_forward import WalkForwardEngine
 
 router = APIRouter()

@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException
 
 from src.analytics.metrics import PerformanceAnalytics
 from src.analytics.monte_carlo import MonteCarloSimulator
-from src.api.schemas.backtest_schemas import (
+from src.api.schemas import (
     ActivePosition,
     BacktestRequest,
     BacktestResponse,
