@@ -1,4 +1,4 @@
-// src/components/views/PerformanceAuditView.tsx
+// frontend/src/components/views/PerformanceAuditView.tsx
 import React, { useMemo, useCallback, useRef, useState } from 'react';
 import { BarChart2, TrendingUp, AlertCircle, RefreshCw, BarChart, ZoomIn } from 'lucide-react';
 import {
@@ -18,7 +18,6 @@ import {
   Cell,
 } from 'recharts';
 
-import type { UnifiedDataPoint } from '../../types';
 import { useBacktest } from '../../context/BacktestContext';
 import { KPIGrid } from '../KPIGrid';
 import { TradeAnalyticsPanel } from '../TradeAnalyticsPanel';
@@ -38,11 +37,8 @@ import {
 } from '../../utils/formatters';
 
 const TIMEFRAME_OPTIONS = [
-  { label: '15m', value: '15m' },
-  { label: '1H', value: '1h' },
   { label: '4H', value: '4h' },
   { label: '1D', value: '1d' },
-  { label: '1W', value: '1wk' },
 ];
 
 const ZOOM_OPTIONS = [
@@ -68,10 +64,7 @@ export const PerformanceAuditView: React.FC = () => {
   const pnlRef = useRef<HTMLParagraphElement>(null);
   const ddRef = useRef<HTMLParagraphElement>(null);
 
-  const isIntraday = useMemo(
-    () => ['15m', '1h', '4h', '5m'].includes(params.timeframe || '1d'),
-    [params.timeframe]
-  );
+  const isIntraday = params.timeframe === '4h';
 
   const formatXTick = useCallback(
     (timeStr: string) => formatAxisDate(timeStr, isIntraday),
@@ -213,7 +206,6 @@ export const PerformanceAuditView: React.FC = () => {
       <div onMouseLeave={handleMouseLeaveContainer}>
         {/* Main Price Action & Execution Chart Container */}
         <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl mb-6 shadow-xl">
-          {/* Top Header Toolbar */}
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-4 pb-4 border-b border-slate-800/80">
             <div className="flex items-center gap-3">
               <BarChart2 size={20} className="text-emerald-400" />
@@ -222,14 +214,12 @@ export const PerformanceAuditView: React.FC = () => {
                   Price Action & Executions ({results.symbol})
                 </h2>
                 <span className="text-xs text-slate-500">
-                  Resolution: {params.timeframe || '1d'} • {fullTimeline.length} Total Bars
+                  {params.start_date} to {params.end_date} • {params.timeframe || '4h'} • {fullTimeline.length} Total Bars
                 </span>
               </div>
             </div>
 
-            {/* Main Action Controls */}
             <div className="flex flex-wrap items-center gap-3">
-              {/* Timeframe Selector */}
               <div className="flex items-center bg-slate-950 p-1 rounded-lg border border-slate-800">
                 {TIMEFRAME_OPTIONS.map((tf) => (
                   <button
@@ -238,7 +228,7 @@ export const PerformanceAuditView: React.FC = () => {
                     disabled={loading}
                     onClick={() => handleTimeframeSelect(tf.value)}
                     className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all ${
-                      (params.timeframe || '1d') === tf.value
+                      (params.timeframe || '4h') === tf.value
                         ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-sm'
                         : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
                     }`}
@@ -248,7 +238,6 @@ export const PerformanceAuditView: React.FC = () => {
                 ))}
               </div>
 
-              {/* View Mode */}
               <div className="flex items-center bg-slate-950 p-1 rounded-lg border border-slate-800">
                 <button
                   type="button"
@@ -274,7 +263,6 @@ export const PerformanceAuditView: React.FC = () => {
                 </button>
               </div>
 
-              {/* Volume Toggle Button */}
               <button
                 type="button"
                 onClick={() => setShowVolume((prev) => !prev)}
@@ -284,18 +272,16 @@ export const PerformanceAuditView: React.FC = () => {
                     : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200'
                 }`}
               >
-                <BarChart size={13} />
-                Volume
+                <BarChart size={13} /> Volume
               </button>
 
               {loading && (
                 <span className="flex items-center gap-1.5 text-xs text-amber-400 bg-amber-400/10 px-2.5 py-1 rounded-lg border border-amber-400/20">
-                  <RefreshCw size={12} className="animate-spin" /> Fetching...
+                  <RefreshCw size={12} className="animate-spin" /> Live Fetching...
                 </span>
               )}
             </div>
 
-            {/* Execution Legend */}
             <div className="flex flex-wrap items-center gap-4 text-xs font-semibold">
               <span className="flex items-center gap-1.5 text-emerald-400">
                 <span className="inline-block w-0 h-0 border-x-[5px] border-x-transparent border-b-[9px] border-b-emerald-400"></span> Buy
@@ -465,7 +451,7 @@ export const PerformanceAuditView: React.FC = () => {
             </div>
           )}
 
-          {/* Dedicated Bottom Footer: Zoom Window Selector */}
+          {/* Bottom Footer: Zoom Window Selector */}
           <div className="flex items-center justify-between pt-3 mt-3 border-t border-slate-800/70 text-xs text-slate-400">
             <span className="text-[11px] text-slate-500">
               Showing <span className="text-slate-300 font-medium">{visibleTimeline.length}</span> of <span className="text-slate-300 font-medium">{fullTimeline.length}</span> bars

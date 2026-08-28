@@ -116,8 +116,17 @@ class ModelTrainer:
         """
         Extracts features and applies CUSUM volatility filtering + Triple-Barrier labeling.
         """
-        features = FeatureEngineeringPipeline.build_features(df)
-        close = df["close"].loc[features.index]
+        df_norm = df.copy()
+        if "timestamp" in df_norm.columns and not isinstance(df_norm.index, pd.DatetimeIndex):
+            df_norm["timestamp"] = pd.to_datetime(df_norm["timestamp"], utc=True).dt.tz_localize(
+                None
+            )
+            df_norm.set_index("timestamp", inplace=True)
+        elif isinstance(df_norm.index, pd.DatetimeIndex) and df_norm.index.tz is not None:
+            df_norm.index = df_norm.index.tz_convert("UTC").tz_localize(None)
+
+        features = FeatureEngineeringPipeline.build_features(df_norm)
+        close = df_norm["close"].loc[features.index]
 
         daily_vol = get_daily_volatility(close, span=self.config.volatility_span)
         events = cusum_filter(close, threshold=daily_vol)
@@ -186,10 +195,18 @@ class ModelTrainer:
             if len(train_idx) == 0 or len(val_idx) == 0:
                 continue
 
-            model = HistGradientBoostingClassifier(**best_params)
-            model.fit(X.iloc[train_idx], y.iloc[train_idx])
+            y_train_fold = y.iloc[train_idx]
+            y_val_fold = y.iloc[val_idx]
 
-            probs = model.predict_proba(X.iloc[val_idx])[:, 1]
+            # Salvaguarda: comprobar que existan ambas clases en entrenamiento y validación
+            if len(np.unique(y_train_fold)) < 2 or len(np.unique(y_val_fold)) < 2:
+                continue
+
+            model = HistGradientBoostingClassifier(**best_params)
+            model.fit(X.iloc[train_idx], y_train_fold)
+
+            y_probs = model.predict_proba(X.iloc[val_idx])
+            probs = y_probs[:, 1] if y_probs.shape[1] > 1 else np.zeros(len(val_idx))
             oof_probs[val_idx] = probs
             oof_preds[val_idx] = (probs >= 0.5).astype(int)
 
@@ -200,7 +217,7 @@ class ModelTrainer:
         # Evaluate Out-Of-Fold metrics
         metrics = {
             "accuracy": float(accuracy_score(y, oof_preds)),
-            "log_loss": float(log_loss(y, oof_probs)),
+            "log_loss": float(log_loss(y, oof_probs)) if len(np.unique(y)) > 1 else 0.0,
             "brier_score": float(brier_score_loss(y, oof_probs)),
             "roc_auc": (float(roc_auc_score(y, oof_probs)) if len(np.unique(y)) > 1 else 0.5),
         }

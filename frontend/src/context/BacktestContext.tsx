@@ -5,7 +5,8 @@ import type { BacktestParams, BacktestResult, StrategyMetadata, StrategyPreset }
 
 export type WorkspaceTab = 'studio' | 'performance' | 'stress_testing' | 'validation' | 'comparison';
 
-export const getDefaultDateRange = (years: number = 2) => {
+// Genera un rango dinámico desde hace N años hasta el día de hoy
+export const getDefaultDateRange = (years: number = 3) => {
   const end = new Date();
   const start = new Date();
   start.setFullYear(end.getFullYear() - years);
@@ -33,6 +34,7 @@ interface BacktestContextType {
   setTimeframe: (timeframe: string) => void;
   applyPreset: (presetName: string) => void;
   reloadPresets: () => Promise<void>;
+  setAcademicBenchmarkDates: () => void;
 }
 
 const BacktestContext = createContext<BacktestContextType | null>(null);
@@ -40,7 +42,7 @@ const BacktestContext = createContext<BacktestContextType | null>(null);
 const getCacheKey = (p: BacktestParams): string => {
   return [
     p.symbol,
-    p.timeframe || '1d',
+    p.timeframe || '4h',
     p.start_date,
     p.end_date,
     p.strategy_id,
@@ -67,11 +69,11 @@ export const BacktestProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [presets, setPresets] = useState<StrategyPreset[]>([]);
   const [selectedPreset, setSelectedPreset] = useState<string>('');
 
-  const defaultDates = getDefaultDateRange(2);
+  const defaultDates = getDefaultDateRange(3);
 
   const [params, setParams] = useState<BacktestParams>({
     symbol: 'BTC-USD',
-    timeframe: '1d',
+    timeframe: '4h',
     start_date: defaultDates.start_date,
     end_date: defaultDates.end_date,
     initial_capital: 100000,
@@ -112,12 +114,19 @@ export const BacktestProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     );
   }, [params, lastRunParams]);
 
+  const setAcademicBenchmarkDates = () => {
+    setParams((prev) => ({
+      ...prev,
+      start_date: '2022-01-01',
+      end_date: '2025-12-31',
+    }));
+  };
+
   const runSimulation = useCallback(
     async (overrideParams?: BacktestParams, forceRefresh: boolean = false) => {
       const activeParams = overrideParams || params;
       const cacheKey = getCacheKey(activeParams);
 
-      // Instant client-side cache return if parameters match a previous run
       if (!forceRefresh && resultsCache.current.has(cacheKey)) {
         const cached = resultsCache.current.get(cacheKey)!;
         setResults(cached);
@@ -224,6 +233,7 @@ export const BacktestProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setTimeframe,
         applyPreset,
         reloadPresets: loadMetadata,
+        setAcademicBenchmarkDates,
       }}
     >
       {children}

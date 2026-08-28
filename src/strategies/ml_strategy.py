@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import joblib
+import numpy as np
 import pandas as pd
 from sklearn.base import BaseEstimator
 
@@ -29,7 +30,7 @@ class MLInferenceStrategy(BaseStrategy):
 
     def __init__(
         self,
-        model_path: str = "models/BTC_USD_model.joblib",
+        model_path: str = "models/BTC_USD_4h_model.joblib",
         threshold_long: float = 0.60,
         threshold_exit: float = 0.40,
         lookback_window: int = 50,
@@ -46,20 +47,43 @@ class MLInferenceStrategy(BaseStrategy):
         self.model = model
         self.feature_names = feature_names or []
         self._history: list[dict[str, Any]] = []
-        self._current_position: int = 0  # 0: flat, 1: long
+        self._current_position: int = 0
 
+        # Intentar cargar artefacto inicial si existe
         if self.model is None and Path(self.model_path).exists():
             self._load_artifact(self.model_path)
 
-    def _load_artifact(self, path: str) -> None:
-        """Loads serialized model and feature schema from disk."""
-        artifact = joblib.load(path)
-        if isinstance(artifact, dict) and "model" in artifact:
-            self.model = artifact["model"]
-            self.feature_names = artifact.get("feature_names", [])
-        else:
-            self.model = artifact
-            self.feature_names = getattr(artifact, "feature_names_in_", []).tolist()
+    def _resolve_model_path_for_symbol(self, symbol: str) -> str:
+        """Determina la ruta del modelo basándose en el símbolo recibido."""
+        clean_sym = symbol.replace("/", "_").replace("-", "_")
+        candidate_4h = Path(f"models/{clean_sym}_4h_model.joblib")
+        candidate_1d = Path(f"models/{clean_sym}_1d_model.joblib")
+        candidate_gen = Path(f"models/{clean_sym}_model.joblib")
+
+        if candidate_4h.exists():
+            return str(candidate_4h)
+        if candidate_1d.exists():
+            return str(candidate_1d)
+        if candidate_gen.exists():
+            return str(candidate_gen)
+        return self.model_path
+
+    def _load_artifact(self, path: str) -> bool:
+        """Carga el modelo serializado y el esquema de variables desde disco."""
+        if not Path(path).exists():
+            return False
+        try:
+            artifact = joblib.load(path)
+            if isinstance(artifact, dict) and "model" in artifact:
+                self.model = artifact["model"]
+                self.feature_names = artifact.get("feature_names", [])
+            else:
+                self.model = artifact
+                self.feature_names = getattr(artifact, "feature_names_in_", []).tolist()
+            self.model_path = path
+            return True
+        except Exception:
+            return False
 
     @classmethod
     def get_metadata(cls) -> StrategyMetadata:
@@ -73,7 +97,7 @@ class MLInferenceStrategy(BaseStrategy):
                     name="model_path",
                     label="Model Artifact Path",
                     param_type="str",
-                    default="models/BTC_USD_model.joblib",
+                    default="models/BTC_USD_4h_model.joblib",
                     description="Filesystem path to the trained joblib model artifact",
                 ),
                 ParameterDefinition(
@@ -110,10 +134,6 @@ class MLInferenceStrategy(BaseStrategy):
         )
 
     def on_bar(self, event: MarketDataEvent) -> SignalEvent | None:
-        """
-        Receives streaming market data, updates feature buffers,
-        and generates entry/exit signals on threshold breaches.
-        """
         self._history.append(
             {
                 "timestamp": event.timestamp,
@@ -125,24 +145,21 @@ class MLInferenceStrategy(BaseStrategy):
             }
         )
 
-        # Retain only necessary buffer to compute indicators
-        if len(self._history) > (self.lookback_window * 2):
+        # Limitar tamaño del buffer en memoria
+        if len(self._history) > (self.lookback_window + 30):
             self._history.pop(0)
 
-        # Insufficient warmup period
         if len(self._history) < self.lookback_window:
             return None
 
-        # Lazy load model if not loaded during initialization
+        # Carga dinámica si el modelo no está en memoria
         if self.model is None:
-            if Path(self.model_path).exists():
-                self._load_artifact(self.model_path)
-            else:
+            resolved_path = self._resolve_model_path_for_symbol(event.symbol)
+            if not self._load_artifact(resolved_path):
                 return None
 
-        # Build real-time feature matrix
+        # Construcción de características sobre el búfer activo
         df = pd.DataFrame(self._history)
-        df.set_index("timestamp", inplace=True)
         features = FeatureEngineeringPipeline.build_features(df)
 
         if features.empty:
@@ -155,10 +172,10 @@ class MLInferenceStrategy(BaseStrategy):
                 return None
             current_vector = current_vector[self.feature_names]
 
-        # Model inference
+        # Inferencia rápida
         prob_long = float(self.model.predict_proba(current_vector)[0, 1])
 
-        # Signal evaluation
+        # Generación de señales según umbral de convicción
         if prob_long >= self.threshold_long and self._current_position == 0:
             self._current_position = 1
             return SignalEvent(

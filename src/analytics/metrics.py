@@ -6,7 +6,26 @@ import pandas as pd
 
 
 class PerformanceAnalytics:
-    TRADING_DAYS_PER_YEAR = 252
+    TRADING_DAYS_EQUITIES = 252
+    TRADING_DAYS_CRYPTO = 365
+
+    @staticmethod
+    def _to_daily_equity(equity_series: pd.Series) -> pd.Series:
+        """Converts any timeframe equity curve (1d, 4h, 1h) into a daily close series."""
+        if equity_series.empty or len(equity_series) < 2:
+            return equity_series
+
+        s = equity_series.copy()
+        if not isinstance(s.index, pd.DatetimeIndex):
+            s.index = pd.to_datetime(s.index, utc=True)
+        elif s.index.tz is None:
+            s.index = s.index.tz_localize("UTC")
+        else:
+            s.index = s.index.tz_convert("UTC")
+
+        # Reagrupación a fin de día UTC para homogeneizar el cálculo de retornos
+        daily = s.resample("1D").last().ffill().dropna()
+        return daily
 
     @staticmethod
     def calculate_cagr(equity_series: pd.Series) -> float:
@@ -16,9 +35,10 @@ class PerformanceAnalytics:
         end_val = equity_series.iloc[-1]
         if start_val <= 0 or end_val <= 0:
             return 0.0
+
         start_date = pd.to_datetime(equity_series.index[0])
         end_date = pd.to_datetime(equity_series.index[-1])
-        years = (end_date - start_date).days / 365.25
+        years = (end_date - start_date).total_seconds() / (365.25 * 86400.0)
         if years <= 0:
             return 0.0
         return float((end_val / start_val) ** (1.0 / years) - 1.0)
@@ -33,75 +53,88 @@ class PerformanceAnalytics:
         return abs(max_dd), drawdown_series
 
     @staticmethod
-    def calculate_sharpe_ratio(equity_series: pd.Series, risk_free_rate: float = 0.0) -> float:
-        if equity_series.empty or len(equity_series) < 2:
+    def calculate_sharpe_ratio(
+        equity_series: pd.Series,
+        risk_free_rate: float = 0.0,
+        periods_per_year: int = 365,
+    ) -> float:
+        daily_equity = PerformanceAnalytics._to_daily_equity(equity_series)
+        if daily_equity.empty or len(daily_equity) < 2:
             return 0.0
-        daily_returns = equity_series.pct_change().dropna()
+
+        daily_returns = daily_equity.pct_change().dropna()
         if daily_returns.empty or daily_returns.std() == 0:
             return 0.0
-        rf_daily = (1.0 + risk_free_rate) ** (
-            1.0 / PerformanceAnalytics.TRADING_DAYS_PER_YEAR
-        ) - 1.0
+
+        rf_daily = (1.0 + risk_free_rate) ** (1.0 / periods_per_year) - 1.0
         excess_returns = daily_returns - rf_daily
-        sharpe = (excess_returns.mean() / daily_returns.std()) * np.sqrt(
-            PerformanceAnalytics.TRADING_DAYS_PER_YEAR
-        )
+        sharpe = (excess_returns.mean() / daily_returns.std()) * np.sqrt(periods_per_year)
         return float(np.nan_to_num(sharpe))
 
     @staticmethod
-    def calculate_sortino_ratio(equity_series: pd.Series, risk_free_rate: float = 0.0) -> float:
-        if equity_series.empty or len(equity_series) < 2:
+    def calculate_sortino_ratio(
+        equity_series: pd.Series,
+        risk_free_rate: float = 0.0,
+        periods_per_year: int = 365,
+    ) -> float:
+        daily_equity = PerformanceAnalytics._to_daily_equity(equity_series)
+        if daily_equity.empty or len(daily_equity) < 2:
             return 0.0
-        daily_returns = equity_series.pct_change().dropna()
+
+        daily_returns = daily_equity.pct_change().dropna()
         if daily_returns.empty:
             return 0.0
-        rf_daily = (1.0 + risk_free_rate) ** (
-            1.0 / PerformanceAnalytics.TRADING_DAYS_PER_YEAR
-        ) - 1.0
+
+        rf_daily = (1.0 + risk_free_rate) ** (1.0 / periods_per_year) - 1.0
         excess_returns = daily_returns - rf_daily
         downside_returns = daily_returns[daily_returns < 0]
         if downside_returns.empty or downside_returns.std() == 0:
             return 0.0
-        sortino = (excess_returns.mean() / downside_returns.std()) * np.sqrt(
-            PerformanceAnalytics.TRADING_DAYS_PER_YEAR
-        )
+
+        sortino = (excess_returns.mean() / downside_returns.std()) * np.sqrt(periods_per_year)
         return float(np.nan_to_num(sortino))
 
     @staticmethod
     def calculate_calmar_ratio(cagr: float, max_drawdown_pct: float) -> float:
-        if max_drawdown_pct <= 0:
-            return 0.0
-        return float(cagr / max_drawdown_pct)
+        if abs(max_drawdown_pct) < 1e-6:
+            return 0.0 if cagr <= 0 else 999.99
+        return float(cagr / abs(max_drawdown_pct))
 
     @staticmethod
     def calculate_alpha_beta(
-        strategy_equity: pd.Series, benchmark_equity: pd.Series, risk_free_rate: float = 0.0
+        strategy_equity: pd.Series,
+        benchmark_equity: pd.Series,
+        risk_free_rate: float = 0.0,
+        periods_per_year: int = 365,
     ) -> tuple[float, float]:
-        if strategy_equity.empty or benchmark_equity.empty:
+        """Calcula el Alpha anualizado y la Beta de la estrategia respecto al benchmark."""
+        strat_daily = PerformanceAnalytics._to_daily_equity(strategy_equity)
+        bench_daily = PerformanceAnalytics._to_daily_equity(benchmark_equity)
+
+        if strat_daily.empty or bench_daily.empty or len(strat_daily) < 2 or len(bench_daily) < 2:
             return 0.0, 1.0
 
-        combined = pd.DataFrame(
-            {
-                "strat": strategy_equity.pct_change(),
-                "bench": benchmark_equity.pct_change(),
-            }
-        ).dropna()
+        strat_ret = strat_daily.pct_change().dropna()
+        bench_ret = bench_daily.pct_change().dropna()
 
-        if len(combined) < 5 or combined["bench"].var() == 0:
+        combined = pd.DataFrame({"strategy": strat_ret, "benchmark": bench_ret}).dropna()
+        if len(combined) < 2:
             return 0.0, 1.0
 
-        cov_matrix = np.cov(combined["strat"], combined["bench"])
-        beta = float(cov_matrix[0, 1] / cov_matrix[1, 1])
+        cov_matrix = np.cov(combined["strategy"], combined["benchmark"])
+        bench_var = cov_matrix[1, 1]
 
-        rf_daily = (1.0 + risk_free_rate) ** (
-            1.0 / PerformanceAnalytics.TRADING_DAYS_PER_YEAR
-        ) - 1.0
-        alpha_daily = (combined["strat"].mean() - rf_daily) - beta * (
-            combined["bench"].mean() - rf_daily
-        )
-        alpha_annualized = float(alpha_daily * PerformanceAnalytics.TRADING_DAYS_PER_YEAR)
+        if bench_var <= 0 or np.isnan(bench_var):
+            beta = 1.0
+        else:
+            beta = float(cov_matrix[0, 1] / bench_var)
 
-        return alpha_annualized, beta
+        rf_daily = (1.0 + risk_free_rate) ** (1.0 / periods_per_year) - 1.0
+        strat_excess_mean = float((combined["strategy"] - rf_daily).mean()) * periods_per_year
+        bench_excess_mean = float((combined["benchmark"] - rf_daily).mean()) * periods_per_year
+
+        alpha = float(strat_excess_mean - beta * bench_excess_mean)
+        return float(np.nan_to_num(alpha)), float(np.nan_to_num(beta))
 
     @staticmethod
     def calculate_trade_statistics(trades: list[object]) -> dict[str, float]:
@@ -151,7 +184,6 @@ class PerformanceAnalytics:
         prob_loss = loss_count / total_trades if total_trades > 0 else 0.0
         expectancy = float((prob_win * avg_win) - (prob_loss * avg_loss))
 
-        # Consecutive streaks
         max_c_wins = 0
         max_c_losses = 0
         curr_wins = 0

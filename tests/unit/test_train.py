@@ -50,7 +50,7 @@ class TestTrainingPipeline:
 
     def test_end_to_end_training(self, synthetic_ohlcv, tmp_path):
         config = TrainingConfig(
-            symbol="BTC-USD",
+            symbol="BTC_USD_1d",
             holding_period=5,
             volatility_span=10,
             n_splits=3,
@@ -66,4 +66,4 @@ class TestTrainingPipeline:
         assert "accuracy" in result.metrics
         assert "roc_auc" in result.metrics
         assert result.model_path is not None
-        assert (tmp_path / "BTC_USD_model.joblib").exists()
+        assert (tmp_path / "BTC_USD_1d_model.joblib").exists()

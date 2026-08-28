@@ -29,6 +29,7 @@ from src.api.schemas.presets import (
     StrategyPresetResponse,
 )
 from src.api.schemas.walk_forward import (
+    OOSEquityPoint,
     ValidationMetricsBlock,
     ValidationTimelinePoint,
     WalkForwardRequest,
@@ -57,6 +58,7 @@ __all__ = [
     "StrategyPresetListResponse",
     # Walk Forward
     "WalkForwardRequest",
+    "OOSEquityPoint",
     "ValidationMetricsBlock",
     "ValidationTimelinePoint",
     "WalkForwardResponse",

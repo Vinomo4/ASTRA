@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 
-from src.api.schemas import WalkForwardRequest, WalkForwardResponse
+from src.api.schemas.walk_forward import WalkForwardRequest, WalkForwardResponse
 from src.backtester.walk_forward import WalkForwardEngine
 
 router = APIRouter()
@@ -12,20 +12,21 @@ router = APIRouter()
 @router.post("/walk-forward", response_model=WalkForwardResponse)
 async def run_walk_forward_validation(req: WalkForwardRequest) -> WalkForwardResponse:
     """
-    Executes an In-Sample / Out-of-Sample Walk-Forward train-test split
-    and computes the Walk-Forward Efficiency Ratio (WFER) for overfitting diagnostics.
+    Executes an Expanding Rolling Walk-Forward multi-window validation
+    and computes the Walk-Forward Efficiency Ratio (WFER).
     """
     engine = WalkForwardEngine()
     try:
-        results = engine.run_split_validation(
+        results = engine.run_rolling_walk_forward(
             symbol=req.symbol,
             start_date=req.start_date,
             end_date=req.end_date,
             strategy_id=req.strategy_id,
             strategy_params=req.strategy_params,
             timeframe=req.timeframe,
-            train_ratio=req.train_ratio,
             initial_capital=req.initial_capital,
+            train_duration_months=req.train_duration_months,
+            test_step_months=req.test_step_months,
             risk_fraction=req.risk_fraction,
             atr_multiplier_sl=req.atr_multiplier_sl,
             atr_multiplier_tp=req.atr_multiplier_tp,

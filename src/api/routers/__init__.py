@@ -7,7 +7,7 @@ from src.api.routers.simulation import router as simulation_router
 from src.api.routers.strategies import router as strategies_router
 from src.api.routers.validation import router as validation_router
 
-router = APIRouter(prefix="/api/backtest", tags=["Backtest"])
+router = APIRouter(tags=["backtest"])
 
 router.include_router(strategies_router)
 router.include_router(simulation_router)

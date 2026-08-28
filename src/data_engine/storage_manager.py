@@ -32,7 +32,6 @@ class StorageManager:
                 )
                 """
             )
-            # Schema migrations for existing databases
             try:
                 conn.execute(
                     "ALTER TABLE ohlcv ADD COLUMN IF NOT EXISTS timeframe VARCHAR DEFAULT '1d'"
@@ -73,7 +72,9 @@ class StorageManager:
         data = df.copy()
         if "timeframe" not in data.columns:
             data["timeframe"] = timeframe
-        data["timestamp"] = pd.to_datetime(data["timestamp"])
+
+        if "timestamp" in data.columns:
+            data["timestamp"] = pd.to_datetime(data["timestamp"], utc=True).dt.tz_localize(None)
 
         with duckdb.connect(self.db_path) as conn:
             conn.register("df_view", data)
@@ -91,6 +92,12 @@ class StorageManager:
         end_date: str,
         timeframe: str = "1d",
     ) -> pd.DataFrame:
+        start_ts = pd.to_datetime(start_date, utc=True).tz_localize(None)
+        end_ts = pd.to_datetime(end_date, utc=True).tz_localize(None)
+
+        if end_ts.hour == 0 and end_ts.minute == 0 and end_ts.second == 0:
+            end_ts = end_ts + pd.Timedelta(days=1) - pd.Timedelta(microseconds=1)
+
         query = """
             SELECT timestamp, symbol, timeframe, open, high, low, close, volume
             FROM ohlcv
@@ -101,9 +108,12 @@ class StorageManager:
             ORDER BY timestamp ASC
         """
         with duckdb.connect(self.db_path) as conn:
-            return conn.execute(query, [symbol, timeframe, start_date, end_date]).df()
+            df = conn.execute(query, [symbol, timeframe, start_ts, end_ts]).df()
 
-    # --- Strategy Preset CRUD Methods ---
+        if not df.empty and "timestamp" in df.columns:
+            df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
+
+        return df
 
     def save_strategy_preset(
         self,
