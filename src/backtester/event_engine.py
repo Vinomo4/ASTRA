@@ -17,6 +17,10 @@ from src.risk_engine.position_sizing import VolatilityPositionSizer
 from src.strategies.base_strategy import BaseStrategy
 
 
+def _serialize_timestamp(timestamp: Any) -> str:
+    return timestamp.isoformat() if hasattr(timestamp, "isoformat") else str(timestamp)
+
+
 class EventEngine:
     def __init__(self) -> None:
         self.queue: deque[Event] = deque()
@@ -75,11 +79,7 @@ class BacktestEngine:
         self.entry_nominal_prices: dict[str, float] = {}
 
     def _close_position(
-        self,
-        position: Position,
-        exit_price: float,
-        timestamp: datetime,
-        reason: str,
+        self, position: Position, exit_price: float, timestamp: datetime, reason: str
     ) -> None:
         order = OrderEvent(
             timestamp=timestamp,
@@ -103,9 +103,7 @@ class BacktestEngine:
         net_pnl = (fill.fill_price - position.average_entry_price) * fill.quantity - total_fees
         net_pnl_pct = (net_pnl / (position.average_entry_price * fill.quantity)) * 100.0
 
-        time_str = (
-            timestamp.strftime("%Y-%m-%d") if hasattr(timestamp, "strftime") else str(timestamp)
-        )
+        time_str = _serialize_timestamp(timestamp)
 
         self.trades.append(
             TradeRecord(
@@ -186,11 +184,7 @@ class BacktestEngine:
                         self.entry_fees[symbol] = fill.commission
                         self.entry_slippages[symbol] = fill.slippage
 
-                        time_str = (
-                            current_time.strftime("%Y-%m-%d")
-                            if hasattr(current_time, "strftime")
-                            else str(current_time)
-                        )
+                        time_str = _serialize_timestamp(current_time)
                         self.executions.append(
                             {
                                 "time": time_str,
@@ -239,11 +233,7 @@ class BacktestEngine:
                 else 0.0
             )
 
-            time_str = (
-                current_time.strftime("%Y-%m-%d")
-                if hasattr(current_time, "strftime")
-                else str(current_time)
-            )
+            time_str = _serialize_timestamp(current_time)
 
             self.equity_history.append({"timestamp": current_time, "equity": total_equity})
             self.snapshots.append(
@@ -289,11 +279,7 @@ class BacktestEngine:
             last_price = float(data.iloc[-1]["close"])
             for sym, pos in self.positions.items():
                 if pos.quantity > 0:
-                    entry_time_str = (
-                        pos.entry_time.strftime("%Y-%m-%d")
-                        if hasattr(pos.entry_time, "strftime")
-                        else str(pos.entry_time)
-                    )
+                    entry_time_str = _serialize_timestamp(pos.entry_time)
                     unrealized_pnl = (last_price - pos.average_entry_price) * pos.quantity
                     unrealized_pnl_pct = (last_price / pos.average_entry_price - 1.0) * 100.0
                     active_pos_data = {

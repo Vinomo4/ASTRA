@@ -1,40 +1,41 @@
 // frontend/src/components/views/PerformanceAuditView.tsx
-import React, { useMemo, useCallback, useRef, useState } from 'react';
-import { BarChart2, TrendingUp, AlertCircle, RefreshCw, BarChart, ZoomIn } from 'lucide-react';
+import { AlertCircle, BarChart, BarChart2, RefreshCw, TrendingUp, ZoomIn } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ResponsiveContainer,
-  ComposedChart,
-  AreaChart,
-  BarChart as RechartsBarChart,
-  Area,
-  Bar,
-  Line,
-  XAxis,
-  YAxis,
-  Tooltip,
-  CartesianGrid,
-  ReferenceDot,
-  ReferenceLine,
-  Cell,
+    Area,
+    AreaChart,
+    Bar,
+    CartesianGrid,
+    Cell,
+    ComposedChart,
+    Line,
+    BarChart as RechartsBarChart,
+    ReferenceDot,
+    ReferenceLine,
+    ResponsiveContainer,
+    Tooltip,
+    XAxis,
+    YAxis,
 } from 'recharts';
 
 import { useBacktest } from '../../context/BacktestContext';
-import { KPIGrid } from '../KPIGrid';
-import { TradeAnalyticsPanel } from '../TradeAnalyticsPanel';
+import type { ExecutionMarker, UnifiedDataPoint } from '../../types';
+import {
+    formatAdaptivePrice,
+    formatAxisDate,
+    formatAxisPrice,
+    formatCompactCurrency,
+    formatCompactVolume,
+    formatPercent,
+} from '../../utils/formatters';
 import { ActivePositionBanner } from '../ActivePositionBanner';
+import { KPIGrid } from '../KPIGrid';
 import { SynchronizedInspector } from '../SynchronizedInspector';
+import { TradeAnalyticsPanel } from '../TradeAnalyticsPanel';
 import { TradeAuditTable } from '../TradeAuditTable';
 import { CandlestickShape } from '../charts/CandlestickShape';
 import { ExecutionMarkerShape } from '../charts/ExecutionMarkerShape';
 import { FastTooltipBridge } from '../charts/FastTooltipBridge';
-import {
-  formatAxisPrice,
-  formatAdaptivePrice,
-  formatCompactCurrency,
-  formatCompactVolume,
-  formatAxisDate,
-  formatPercent,
-} from '../../utils/formatters';
 
 const TIMEFRAME_OPTIONS = [
   { label: '4H', value: '4h' },
@@ -47,6 +48,34 @@ const ZOOM_OPTIONS = [
   { label: '250 Bars', count: 250 },
   { label: 'All Bars', count: 0 },
 ];
+
+const MAX_RENDERED_BARS = 600;
+
+type ChartDataPoint = UnifiedDataPoint & { isUp: boolean };
+
+const sampleTimeline = (
+  timeline: ChartDataPoint[],
+  markers: ExecutionMarker[]
+): ChartDataPoint[] => {
+  if (timeline.length <= MAX_RENDERED_BARS) return timeline;
+
+  const indexByTime = new Map(timeline.map((point, index) => [point.time, index]));
+  const selectedIndices = new Set<number>([0, timeline.length - 1]);
+
+  for (const marker of markers) {
+    const markerIndex = indexByTime.get(marker.time);
+    if (markerIndex !== undefined) selectedIndices.add(markerIndex);
+  }
+
+  const regularSlots = Math.max(0, MAX_RENDERED_BARS - selectedIndices.size);
+  for (let slot = 1; slot <= regularSlots; slot += 1) {
+    selectedIndices.add(Math.round((slot * (timeline.length - 1)) / (regularSlots + 1)));
+  }
+
+  return [...selectedIndices]
+    .sort((left, right) => left - right)
+    .map((index) => timeline[index]);
+};
 
 export const PerformanceAuditView: React.FC = () => {
   const { results, params, setTimeframe, runSimulation, loading, setActiveTab } = useBacktest();
@@ -63,6 +92,8 @@ export const PerformanceAuditView: React.FC = () => {
   const avgPriceRef = useRef<HTMLParagraphElement>(null);
   const pnlRef = useRef<HTMLParagraphElement>(null);
   const ddRef = useRef<HTMLParagraphElement>(null);
+  const inspectorFrameRef = useRef<number | null>(null);
+  const pendingInspectorRef = useRef<{ data: UnifiedDataPoint; isHover: boolean } | null>(null);
 
   const isIntraday = params.timeframe === '4h';
 
@@ -71,7 +102,7 @@ export const PerformanceAuditView: React.FC = () => {
     [isIntraday]
   );
 
-  const fullTimeline = useMemo(() => {
+  const fullTimeline = useMemo<ChartDataPoint[]>(() => {
     if (!results || !results.snapshots || !results.ohlc_history) return [];
     const snapMap = new Map(results.snapshots.map((s) => [s.time, s]));
     const benchMap = new Map((results.benchmark_curve || []).map((b) => [b.time, b.equity]));
@@ -114,7 +145,7 @@ export const PerformanceAuditView: React.FC = () => {
     return fullTimeline.slice(-zoomBars);
   }, [fullTimeline, zoomBars]);
 
-  const updateInspectorDOM = useCallback((data: any, isHover: boolean) => {
+  const commitInspectorDOM = useCallback((data: UnifiedDataPoint, isHover: boolean) => {
     if (!data) return;
 
     if (badgeRef.current) {
@@ -146,13 +177,38 @@ export const PerformanceAuditView: React.FC = () => {
     }
   }, []);
 
+  const updateInspectorDOM = useCallback(
+    (data: UnifiedDataPoint, isHover: boolean) => {
+      pendingInspectorRef.current = { data, isHover };
+      if (inspectorFrameRef.current !== null) return;
+
+      inspectorFrameRef.current = window.requestAnimationFrame(() => {
+        inspectorFrameRef.current = null;
+        const pendingInspector = pendingInspectorRef.current;
+        if (pendingInspector) {
+          commitInspectorDOM(pendingInspector.data, pendingInspector.isHover);
+        }
+      });
+    },
+    [commitInspectorDOM]
+  );
+
+  useEffect(
+    () => () => {
+      if (inspectorFrameRef.current !== null) {
+        window.cancelAnimationFrame(inspectorFrameRef.current);
+      }
+    },
+    []
+  );
+
   const handleMouseLeaveContainer = useCallback(() => {
     if (visibleTimeline.length > 0) {
       updateInspectorDOM(visibleTimeline[visibleTimeline.length - 1], false);
     }
   }, [visibleTimeline, updateInspectorDOM]);
 
-  const priceDomain = useMemo(() => {
+  const priceDomain = useMemo<[number, number]>(() => {
     if (visibleTimeline.length === 0) return [0, 100];
     const minLow = Math.min(...visibleTimeline.map((d) => d.low));
     const maxHigh = Math.max(...visibleTimeline.map((d) => d.high));
@@ -168,8 +224,15 @@ export const PerformanceAuditView: React.FC = () => {
     return results.execution_markers.filter((m) => m.time >= startTime && m.time <= endTime);
   }, [results, visibleTimeline]);
 
+  const chartTimeline = useMemo(
+    () => sampleTimeline(visibleTimeline, visibleMarkers),
+    [visibleTimeline, visibleMarkers]
+  );
+
   const renderCandle = useCallback(
-    (props: any) => <CandlestickShape {...props} priceDomain={priceDomain} />,
+    (props: Omit<React.ComponentProps<typeof CandlestickShape>, 'priceDomain'>) => (
+      <CandlestickShape {...props} priceDomain={priceDomain} />
+    ),
     [priceDomain]
   );
 
@@ -178,7 +241,7 @@ export const PerformanceAuditView: React.FC = () => {
     await runSimulation({ ...params, timeframe: tf });
   };
 
-  const initialSnapshot = visibleTimeline.length > 0 ? (visibleTimeline[visibleTimeline.length - 1] as any) : null;
+  const initialSnapshot = visibleTimeline.length > 0 ? visibleTimeline[visibleTimeline.length - 1] : null;
 
   if (!results) {
     return (
@@ -300,8 +363,8 @@ export const PerformanceAuditView: React.FC = () => {
 
           {/* Primary Chart Canvas */}
           <div className={showVolume ? 'h-72 w-full' : 'h-88 w-full'}>
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart syncId="portfolioSync" data={visibleTimeline}>
+            <ResponsiveContainer width="100%" height="100%" debounce={50}>
+              <ComposedChart syncId="portfolioSync" data={chartTimeline}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
                 <XAxis
                   dataKey="time"
@@ -407,8 +470,8 @@ export const PerformanceAuditView: React.FC = () => {
               <div className="text-[11px] font-semibold text-slate-400 mb-1 flex items-center gap-1.5">
                 <BarChart size={12} className="text-slate-500" /> Trading Volume
               </div>
-              <ResponsiveContainer width="100%" height="80%">
-                <RechartsBarChart syncId="portfolioSync" data={visibleTimeline}>
+              <ResponsiveContainer width="100%" height="80%" debounce={50}>
+                <RechartsBarChart syncId="portfolioSync" data={chartTimeline}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
                   <XAxis
                     dataKey="time"
@@ -438,7 +501,7 @@ export const PerformanceAuditView: React.FC = () => {
                     }
                   />
                   <Bar dataKey="volume" isAnimationActive={false}>
-                    {visibleTimeline.map((entry, index) => (
+                    {chartTimeline.map((entry, index) => (
                       <Cell
                         key={`cell-${index}`}
                         fill={entry.isUp ? '#10b981' : '#f43f5e'}
@@ -496,8 +559,8 @@ export const PerformanceAuditView: React.FC = () => {
           </div>
 
           <div className="h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart syncId="portfolioSync" data={visibleTimeline}>
+            <ResponsiveContainer width="100%" height="100%" debounce={50}>
+              <AreaChart syncId="portfolioSync" data={chartTimeline}>
                 <defs>
                   <linearGradient id="colorEquity" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />

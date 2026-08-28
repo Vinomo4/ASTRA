@@ -19,9 +19,9 @@ export const TradeAuditTable = memo(({ trades }: { trades: TradeItem[] }) => (
       <h2 className="text-base font-semibold text-white">Closed Trades Audit Log</h2>
       <span className="text-xs text-slate-400">Total Closed: {trades.length} positions</span>
     </div>
-    <div className="overflow-x-auto">
+    <div className="max-h-[32rem] overflow-auto">
       <table className="w-full text-left text-sm">
-        <thead className="bg-slate-800/50 text-slate-400 text-xs uppercase font-semibold">
+        <thead className="sticky top-0 z-10 bg-slate-800 text-slate-400 text-xs uppercase font-semibold shadow-sm">
           <tr>
             <th className="p-3">ID</th>
             <th className="p-3">Symbol</th>

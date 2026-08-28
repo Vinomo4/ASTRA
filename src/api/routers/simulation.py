@@ -1,16 +1,16 @@
 # src/api/routers/simulation.py
 from __future__ import annotations
 
-from datetime import datetime
 import json
 import logging
 import os
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
 import numpy as np
 import pandas as pd
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from src.analytics.metrics import PerformanceAnalytics
@@ -156,7 +156,7 @@ def _load_presets_from_disk() -> list[dict[str, Any]]:
     if not PRESETS_FILE.exists():
         return []
     try:
-        with open(PRESETS_FILE, "r", encoding="utf-8") as f:
+        with open(PRESETS_FILE, encoding="utf-8") as f:
             return json.load(f)
     except Exception:
         return []
@@ -232,10 +232,7 @@ async def delete_preset(preset_name: str) -> dict[str, str]:
         raise HTTPException(status_code=404, detail=f"Preset '{preset_name}' no encontrado.")
 
     _save_presets_to_disk(presets)
-    return {
-        "status": "success",
-        "message": f"Preset '{preset_name}' eliminado.",
-    }
+    return {"status": "success", "message": f"Preset '{preset_name}' eliminado."}
 
 
 # ==========================================
@@ -309,8 +306,7 @@ async def run_backtest(req: BacktestRequest) -> BacktestResponse:
         )
     except Exception as exc:
         raise HTTPException(
-            status_code=400,
-            detail=f"Error cargando datos para {req.symbol} ({timeframe}): {exc}",
+            status_code=400, detail=f"Error cargando datos para {req.symbol} ({timeframe}): {exc}"
         ) from exc
 
     if df.empty:
@@ -358,8 +354,7 @@ async def run_backtest(req: BacktestRequest) -> BacktestResponse:
     trade_stats = PerformanceAnalytics.calculate_trade_statistics(engine.trades)
 
     mc_simulator = MonteCarloSimulator(
-        num_simulations=req.num_simulations,
-        ruin_threshold_pct=req.ruin_threshold_pct,
+        num_simulations=req.num_simulations, ruin_threshold_pct=req.ruin_threshold_pct
     )
     mc_output = mc_simulator.run(engine.trades, req.initial_capital)
 
@@ -414,10 +409,25 @@ async def run_backtest(req: BacktestRequest) -> BacktestResponse:
         for ts, val in results["equity_curve"].items()
     ]
 
-    snapshots = [PortfolioSnapshot(**snap) for snap in results["snapshots"]]
-    execution_markers = [ExecutionMarker(**marker) for marker in results["execution_markers"]]
+    snapshots = [
+        PortfolioSnapshot(**{**snapshot, "time": pd.Timestamp(snapshot["time"]).strftime(time_fmt)})
+        for snapshot in results["snapshots"]
+    ]
+    execution_markers = [
+        ExecutionMarker(**{**marker, "time": pd.Timestamp(marker["time"]).strftime(time_fmt)})
+        for marker in results["execution_markers"]
+    ]
     active_pos = (
-        ActivePosition(**results["active_position"]) if results["active_position"] else None
+        ActivePosition(
+            **{
+                **results["active_position"],
+                "entry_time": pd.Timestamp(results["active_position"]["entry_time"]).strftime(
+                    time_fmt
+                ),
+            }
+        )
+        if results["active_position"]
+        else None
     )
 
     trade_items = [

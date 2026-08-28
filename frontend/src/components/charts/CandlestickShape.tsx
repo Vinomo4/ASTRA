@@ -11,7 +11,7 @@ interface CandlestickProps {
     low: number;
   };
   background?: {
-    y: number;
+    y: number | null;
     height: number;
   };
   priceDomain: [number, number];

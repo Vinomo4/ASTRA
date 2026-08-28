@@ -1,16 +1,29 @@
 // frontend/src/components/layout/GlobalControlRibbon.tsx
+import { AlertCircle, Calendar, ChevronDown, DollarSign, Play, } from 'lucide-react';
 import React, { useState } from 'react';
-import { Calendar, ChevronDown, Play, DollarSign, AlertCircle,  } from 'lucide-react';
-import { useBacktest, getDefaultDateRange } from '../../context/BacktestContext';
-import { AssetPickerModal } from './AssetPickerModal';
+import { getDefaultDateRange, useBacktest } from '../../context/BacktestContext';
 import { ASSET_CATALOG } from '../../types';
+import { AssetPickerModal } from './AssetPickerModal';
 
 type DurationOption = '1Y' | '2Y' | '3Y' | '5Y' | 'custom';
+
+const getActiveDuration = (startDate: string, endDate: string): DurationOption => {
+  const end = new Date(`${endDate}T00:00:00Z`);
+  if (Number.isNaN(end.getTime())) return 'custom';
+
+  for (const years of [1, 2, 3, 5] as const) {
+    const expectedStart = new Date(end);
+    expectedStart.setUTCFullYear(expectedStart.getUTCFullYear() - years);
+    if (expectedStart.toISOString().slice(0, 10) === startDate) return `${years}Y`;
+  }
+
+  return 'custom';
+};
 
 export const GlobalControlRibbon: React.FC = () => {
   const { params, setParams, runSimulation, loading, selectAsset, isDirty, lastRunParams } = useBacktest();
   const [isAssetModalOpen, setIsAssetModalOpen] = useState(false);
-  const [activeDuration, setActiveDuration] = useState<DurationOption>('2Y');
+  const activeDuration = getActiveDuration(params.start_date, params.end_date);
 
   const currentAsset = ASSET_CATALOG.find((a) => a.symbol === params.symbol) || {
     symbol: params.symbol,
@@ -23,8 +36,7 @@ export const GlobalControlRibbon: React.FC = () => {
     lastRunParams &&
     (params.start_date !== lastRunParams.start_date || params.end_date !== lastRunParams.end_date);
 
-  const handleQuickDuration = (years: number, label: DurationOption) => {
-    setActiveDuration(label);
+  const handleQuickDuration = (years: number) => {
     const { start_date, end_date } = getDefaultDateRange(years);
 
     setParams((prev) => ({
@@ -35,7 +47,6 @@ export const GlobalControlRibbon: React.FC = () => {
   };
 
   const handleDateChange = (field: 'start_date' | 'end_date', value: string) => {
-    setActiveDuration('custom');
     setParams((prev) => ({ ...prev, [field]: value }));
   };
 
@@ -95,7 +106,7 @@ export const GlobalControlRibbon: React.FC = () => {
                   <button
                     key={label}
                     type="button"
-                    onClick={() => handleQuickDuration(years, label)}
+                    onClick={() => handleQuickDuration(years)}
                     className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition ${
                       isActive
                         ? isDateStale
