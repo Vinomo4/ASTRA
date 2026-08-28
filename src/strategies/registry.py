@@ -25,16 +25,6 @@ class StrategyRegistry:
         return strategy_cls
 
     @classmethod
-    def get_strategy_class(cls, strategy_id: str) -> type[BaseStrategy]:
-        """Retrieves a strategy class by its registered ID."""
-        if strategy_id not in cls._registry:
-            available = list(cls._registry.keys())
-            raise KeyError(
-                f"Strategy '{strategy_id}' not found in registry. Available: {available}"
-            )
-        return cls._registry[strategy_id]
-
-    @classmethod
     def create(cls, strategy_id: str, **kwargs) -> BaseStrategy:
         if strategy_id not in cls._registry:
             raise KeyError(

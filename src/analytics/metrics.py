@@ -6,9 +6,6 @@ import pandas as pd
 
 
 class PerformanceAnalytics:
-    TRADING_DAYS_EQUITIES = 252
-    TRADING_DAYS_CRYPTO = 365
-
     @staticmethod
     def _to_daily_equity(equity_series: pd.Series) -> pd.Series:
         """Converts any timeframe equity curve (1d, 4h, 1h) into a daily close series."""

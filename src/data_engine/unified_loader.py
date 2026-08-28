@@ -43,5 +43,3 @@ class UnifiedDataLoader(BaseDataLoader):
 
         # 3. Fallback a Yahoo Finance (acciones/ETFs 1d o ventana intradiaria disponible)
         return self.yfinance.fetch_ohlcv(symbol, start, end, timeframe=timeframe)
-
-    load = fetch_ohlcv

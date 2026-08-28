@@ -360,5 +360,4 @@ class WalkForwardEngine:
             "oos_equity_curve": oos_curve,
         }
 
-    run_split_validation = run_rolling_walk_forward
-    run = run_rolling_walk_forward
+

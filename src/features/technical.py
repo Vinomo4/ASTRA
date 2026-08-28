@@ -26,20 +26,6 @@ class TechnicalFeatures:
         rs = gain / (loss + 1e-9)
         return 100 - (100 / (1 + rs))
 
-    @staticmethod
-    def calculate_bollinger_bands(
-        df: pd.DataFrame, period: int = 20, num_std: float = 2.0
-    ) -> tuple[pd.Series, pd.Series, pd.Series]:
-        middle = df["close"].rolling(window=period).mean()
-        std = df["close"].rolling(window=period).std()
-        upper = middle + (std * num_std)
-        lower = middle - (std * num_std)
-        return upper, middle, lower
-
-    @staticmethod
-    def calculate_ema(df: pd.DataFrame, span: int) -> pd.Series:
-        return df["close"].ewm(span=span, adjust=False).mean()
-
 
 def rsi(close: pd.Series, window: int = 14) -> pd.Series:
     return TechnicalFeatures.calculate_rsi(pd.DataFrame({"close": close}), period=window)
