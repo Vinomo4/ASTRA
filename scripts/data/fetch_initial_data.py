@@ -1,4 +1,5 @@
-# scripts/fetch_initial_data.py
+"""Fetch initial AAPL market data and persist it in DuckDB."""
+
 import duckdb
 
 from src.core.config import settings
@@ -7,6 +8,7 @@ from src.data_engine.yfinance_loader import YFinanceLoader
 
 
 def main() -> None:
+    """Download AAPL bars, store them, and verify database persistence."""
     symbol = "AAPL"
     start_date = "2023-01-01"
     end_date = "2025-01-01"

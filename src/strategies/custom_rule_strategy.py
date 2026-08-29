@@ -1,4 +1,5 @@
-# src/strategies/custom_rule_strategy.py
+"""User-configurable strategy composed from indicator comparison rules."""
+
 from __future__ import annotations
 
 from collections import deque
@@ -14,12 +15,20 @@ from src.strategies.registry import StrategyRegistry
 
 @StrategyRegistry.register
 class CustomRuleStrategy(BaseStrategy):
+    """Evaluate caller-defined entry and exit rules over rolling indicators."""
+
     id = "custom_rule_strategy"
     name = "Custom Rule-Based Constructor"
     description = "User-defined multi-condition strategy using dynamic technical indicators and comparison rules."
     category = "Rule-Based"
 
     def __init__(self, **params: Any) -> None:
+        """Initialize rule definitions, indicator periods, and bar history.
+
+        Args:
+            **params: Strategy parameter overrides, including optional entry
+                and exit rule lists.
+        """
         super().__init__(**params)
         # Entry / Exit rules passed as condition lists
         self.entry_rules: list[dict[str, Any]] = self.get_param(
@@ -39,6 +48,11 @@ class CustomRuleStrategy(BaseStrategy):
 
     @classmethod
     def get_metadata(cls) -> StrategyMetadata:
+        """Return the custom-rule strategy metadata.
+
+        Returns:
+            Strategy identity and configurable indicator periods.
+        """
         return StrategyMetadata(
             id=cls.id,
             name=cls.name,
@@ -174,6 +188,15 @@ class CustomRuleStrategy(BaseStrategy):
         return False
 
     def on_bar(self, event: MarketDataEvent) -> SignalEvent | None:
+        """Evaluate entry and exit rules for a completed market bar.
+
+        Args:
+            event: Completed market bar to append and evaluate.
+
+        Returns:
+            A long signal when every entry rule matches, an exit signal when
+            any exit rule matches, or ``None`` during warmup or without a match.
+        """
         self._history.append(event)
         min_bars = max(self.slow_period, self.rsi_period + 1, self.fast_period)
         if len(self._history) < min_bars:
@@ -184,17 +207,13 @@ class CustomRuleStrategy(BaseStrategy):
         # Check Entry Conditions (ALL rules must be satisfied - Logical AND)
         if self.entry_rules and all(self._evaluate_rule(r, indicators) for r in self.entry_rules):
             return SignalEvent(
-                timestamp=event.timestamp,
-                symbol=event.symbol,
-                signal_type=SignalType.LONG,
+                timestamp=event.timestamp, symbol=event.symbol, signal_type=SignalType.LONG
             )
 
         # Check Exit Conditions
         if self.exit_rules and any(self._evaluate_rule(r, indicators) for r in self.exit_rules):
             return SignalEvent(
-                timestamp=event.timestamp,
-                symbol=event.symbol,
-                signal_type=SignalType.EXIT,
+                timestamp=event.timestamp, symbol=event.symbol, signal_type=SignalType.EXIT
             )
 
         return None

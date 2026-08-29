@@ -1,4 +1,5 @@
-# src/analytics/metrics.py
+"""Performance metric calculations for equity curves and trade records."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -6,6 +7,8 @@ import pandas as pd
 
 
 class PerformanceAnalytics:
+    """Calculate performance metrics for backtest results."""
+
     @staticmethod
     def _to_daily_equity(equity_series: pd.Series) -> pd.Series:
         """Converts any timeframe equity curve (1d, 4h, 1h) into a daily close series."""
@@ -20,12 +23,20 @@ class PerformanceAnalytics:
         else:
             s.index = s.index.tz_convert("UTC")
 
-        # Reagrupación a fin de día UTC para homogeneizar el cálculo de retornos
+        # Resample at each UTC day-end to standardize return calculations.
         daily = s.resample("1D").last().ffill().dropna()
         return daily
 
     @staticmethod
     def calculate_cagr(equity_series: pd.Series) -> float:
+        """Calculate compound annual growth from an equity curve.
+
+        Args:
+            equity_series: Equity values indexed by observation time.
+
+        Returns:
+            Compound annual growth as a decimal.
+        """
         if equity_series.empty or len(equity_series) < 2:
             return 0.0
         start_val = equity_series.iloc[0]
@@ -42,6 +53,15 @@ class PerformanceAnalytics:
 
     @staticmethod
     def calculate_max_drawdown(equity_series: pd.Series) -> tuple[float, pd.Series]:
+        """Calculate the maximum drawdown and drawdown series.
+
+        Args:
+            equity_series: Equity values in chronological order.
+
+        Returns:
+            The absolute maximum drawdown and the drawdown at each observation,
+            both expressed as decimals.
+        """
         if equity_series.empty:
             return 0.0, pd.Series(dtype=float)
         cumulative_max = equity_series.cummax()
@@ -51,10 +71,18 @@ class PerformanceAnalytics:
 
     @staticmethod
     def calculate_sharpe_ratio(
-        equity_series: pd.Series,
-        risk_free_rate: float = 0.0,
-        periods_per_year: int = 365,
+        equity_series: pd.Series, risk_free_rate: float = 0.0, periods_per_year: int = 365
     ) -> float:
+        """Calculate an annualized Sharpe ratio from daily equity returns.
+
+        Args:
+            equity_series: Equity values indexed by observation time.
+            risk_free_rate: Annual risk-free rate expressed as a decimal.
+            periods_per_year: Number of daily periods used for annualization.
+
+        Returns:
+            The annualized Sharpe ratio, or zero when it cannot be calculated.
+        """
         daily_equity = PerformanceAnalytics._to_daily_equity(equity_series)
         if daily_equity.empty or len(daily_equity) < 2:
             return 0.0
@@ -70,10 +98,18 @@ class PerformanceAnalytics:
 
     @staticmethod
     def calculate_sortino_ratio(
-        equity_series: pd.Series,
-        risk_free_rate: float = 0.0,
-        periods_per_year: int = 365,
+        equity_series: pd.Series, risk_free_rate: float = 0.0, periods_per_year: int = 365
     ) -> float:
+        """Calculate an annualized Sortino ratio from daily equity returns.
+
+        Args:
+            equity_series: Equity values indexed by observation time.
+            risk_free_rate: Annual risk-free rate expressed as a decimal.
+            periods_per_year: Number of daily periods used for annualization.
+
+        Returns:
+            The annualized Sortino ratio, or zero when it cannot be calculated.
+        """
         daily_equity = PerformanceAnalytics._to_daily_equity(equity_series)
         if daily_equity.empty or len(daily_equity) < 2:
             return 0.0
@@ -93,6 +129,16 @@ class PerformanceAnalytics:
 
     @staticmethod
     def calculate_calmar_ratio(cagr: float, max_drawdown_pct: float) -> float:
+        """Calculate the ratio of growth to maximum drawdown.
+
+        Args:
+            cagr: Compound annual growth rate.
+            max_drawdown_pct: Maximum drawdown in the same scale as ``cagr``.
+
+        Returns:
+            The Calmar ratio, capped at ``999.99`` for positive growth with a
+            negligible drawdown.
+        """
         if abs(max_drawdown_pct) < 1e-6:
             return 0.0 if cagr <= 0 else 999.99
         return float(cagr / abs(max_drawdown_pct))
@@ -104,7 +150,17 @@ class PerformanceAnalytics:
         risk_free_rate: float = 0.0,
         periods_per_year: int = 365,
     ) -> tuple[float, float]:
-        """Calcula el Alpha anualizado y la Beta de la estrategia respecto al benchmark."""
+        """Calculate annualized strategy alpha and beta against a benchmark.
+
+        Args:
+            strategy_equity: Strategy equity values indexed by observation time.
+            benchmark_equity: Benchmark equity values indexed by observation time.
+            risk_free_rate: Annual risk-free rate expressed as a decimal.
+            periods_per_year: Number of daily periods used for annualization.
+
+        Returns:
+            A tuple containing annualized alpha and beta.
+        """
         strat_daily = PerformanceAnalytics._to_daily_equity(strategy_equity)
         bench_daily = PerformanceAnalytics._to_daily_equity(benchmark_equity)
 
@@ -135,6 +191,15 @@ class PerformanceAnalytics:
 
     @staticmethod
     def calculate_trade_statistics(trades: list[object]) -> dict[str, float]:
+        """Summarize profit, loss, duration, and streak statistics for trades.
+
+        Args:
+            trades: Trade-like objects exposing ``pnl``, ``entry_time``, and
+                ``exit_time`` attributes.
+
+        Returns:
+            A mapping of aggregate trade statistic names to numeric values.
+        """
         if not trades:
             return {
                 "win_rate_pct": 0.0,

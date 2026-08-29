@@ -1,7 +1,7 @@
 // frontend/src/components/layout/AssetPickerModal.tsx
-import React, { useState, useMemo } from 'react';
-import { Search, X, Check, Coins, Building2, TrendingUp, DollarSign } from 'lucide-react';
-import { ASSET_CATALOG, type AssetCategory } from '../../types';
+import { Building2, Check, Coins, DollarSign, Search, TrendingUp, X } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { ASSET_CATALOG, ASSET_CATEGORY_LABELS, type AssetCategory } from '../../types';
 
 interface AssetPickerModalProps {
   isOpen: boolean;
@@ -10,12 +10,12 @@ interface AssetPickerModalProps {
   onSelectAsset: (symbol: string) => void;
 }
 
-const CATEGORIES: ('All' | AssetCategory)[] = [
-  'All',
-  'Crypto',
-  'US Equities',
-  'Indices & ETFs',
-  'Commodities & FX',
+const CATEGORIES: { value: 'All' | AssetCategory; label: string }[] = [
+  { value: 'All', label: 'Todos' },
+  { value: 'Crypto', label: ASSET_CATEGORY_LABELS.Crypto },
+  { value: 'US Equities', label: ASSET_CATEGORY_LABELS['US Equities'] },
+  { value: 'Indices & ETFs', label: ASSET_CATEGORY_LABELS['Indices & ETFs'] },
+  { value: 'Commodities & FX', label: ASSET_CATEGORY_LABELS['Commodities & FX'] },
 ];
 
 const getCategoryIcon = (category: AssetCategory) => {
@@ -58,14 +58,16 @@ export const AssetPickerModal: React.FC<AssetPickerModalProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-800">
           <div>
-            <h3 className="text-base font-bold text-white">Select Financial Instrument</h3>
+            <h3 className="text-base font-bold text-white">Seleccionar instrumento financiero</h3>
             <p className="text-xs text-slate-400 mt-0.5">
-              Choose an asset across crypto, equities, benchmark ETFs, and commodities.
+              Elige entre criptoactivos, acciones, ETF de referencia y materias primas.
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
+            aria-label="Cerrar selector de activos"
+            title="Cerrar selector de activos"
             className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
           >
             <X size={18} />
@@ -77,7 +79,7 @@ export const AssetPickerModal: React.FC<AssetPickerModalProps> = ({
           <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
-            placeholder="Search ticker symbol or company name (e.g. NVDA, Bitcoin, S&P 500)..."
+            placeholder="Buscar por símbolo o nombre (p. ej., NVDA, Bitcoin, S&P 500)..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-4 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 placeholder-slate-500"
@@ -87,18 +89,18 @@ export const AssetPickerModal: React.FC<AssetPickerModalProps> = ({
 
         {/* Category Filter Pills */}
         <div className="flex flex-wrap gap-1.5 mb-4">
-          {CATEGORIES.map((cat) => (
+          {CATEGORIES.map(({ value, label }) => (
             <button
-              key={cat}
+              key={value}
               type="button"
-              onClick={() => setActiveCategory(cat)}
+              onClick={() => setActiveCategory(value)}
               className={`text-xs px-3 py-1 rounded-lg border font-semibold transition ${
-                activeCategory === cat
+                activeCategory === value
                   ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
                   : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
               }`}
             >
-              {cat}
+              {label}
             </button>
           ))}
         </div>
@@ -107,7 +109,7 @@ export const AssetPickerModal: React.FC<AssetPickerModalProps> = ({
         <div className="overflow-y-auto pr-1 space-y-2 flex-1">
           {filteredAssets.length === 0 ? (
             <div className="py-12 text-center text-slate-500 text-xs">
-              No financial instruments matching "{searchQuery}"
+              No hay instrumentos financieros que coincidan con «{searchQuery}».
             </div>
           ) : (
             filteredAssets.map((asset) => {
@@ -142,7 +144,7 @@ export const AssetPickerModal: React.FC<AssetPickerModalProps> = ({
 
                   <div className="flex items-center gap-3">
                     <span className="text-[11px] font-semibold text-slate-500 uppercase">
-                      {asset.category}
+                      {ASSET_CATEGORY_LABELS[asset.category]}
                     </span>
                     {isSelected && (
                       <div className="w-5 h-5 rounded-full bg-emerald-500 text-slate-950 flex items-center justify-center">

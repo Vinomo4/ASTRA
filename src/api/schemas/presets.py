@@ -1,11 +1,15 @@
-# src/api/schemas/presets.py
+"""Define strategy preset request and response schemas."""
+
 from __future__ import annotations
 
 from typing import Any
+
 from pydantic import BaseModel, Field
 
 
 class StrategyPresetCreate(BaseModel):
+    """Represent strategy and execution settings for a named preset."""
+
     preset_name: str = Field(..., min_length=2, max_length=60, description="Unique preset name")
     strategy_id: str = Field(..., description="Target strategy identifier")
     timeframe: str = Field(default="1d", description="Bar interval: 15m, 1h, 4h, 1d, 1wk")
@@ -21,8 +25,12 @@ class StrategyPresetCreate(BaseModel):
 
 
 class StrategyPresetResponse(StrategyPresetCreate):
+    """Represent a persisted strategy preset and its update time."""
+
     updated_at: str
 
 
 class StrategyPresetListResponse(BaseModel):
+    """Represent a collection of persisted strategy presets."""
+
     presets: list[StrategyPresetResponse]

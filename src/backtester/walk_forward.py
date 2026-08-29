@@ -1,8 +1,10 @@
-# src/backtester/walk_forward.py
+"""Rolling walk-forward evaluation for registered trading strategies."""
+
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
+
 import pandas as pd
 
 from src.analytics.metrics import PerformanceAnalytics
@@ -17,17 +19,35 @@ from src.strategies.registry import StrategyRegistry
 
 
 class WalkForwardEngine:
+    """Evaluate strategies across sequential out-of-sample windows."""
+
     def __init__(
-        self,
-        storage: StorageManager | None = None,
-        loader: BaseDataLoader | None = None,
+        self, storage: StorageManager | None = None, loader: BaseDataLoader | None = None
     ) -> None:
+        """Initialize the walk-forward engine.
+
+        Args:
+            storage: Market-data storage manager. A default manager is created
+                when omitted.
+            loader: Market-data loader. A unified loader is created when omitted.
+        """
         self.storage = storage or StorageManager()
         self.loader = loader or UnifiedDataLoader()
 
     def _fetch_market_data(
         self, symbol: str, start_date: str, end_date: str, timeframe: str = "1d"
     ) -> pd.DataFrame:
+        """Load market data for a walk-forward evaluation.
+
+        Args:
+            symbol: Market symbol to load.
+            start_date: Inclusive start date.
+            end_date: Inclusive end date.
+            timeframe: Requested market-bar timeframe.
+
+        Returns:
+            Standardized OHLCV bars for the requested period.
+        """
         from src.api.routers.simulation import get_market_data
 
         return get_market_data(
@@ -48,6 +68,28 @@ class WalkForwardEngine:
         timeframe: str,
         window_tag: str = "is",
     ) -> dict[str, Any]:
+        """Prepare strategy parameters for one evaluation window.
+
+        Non-ML strategies retain their supplied parameters. ML inference
+        strategies reuse a window-specific model artifact when available or
+        train and persist one from the supplied in-sample bars.
+
+        Args:
+            strategy_id: Registry identifier for the strategy.
+            strategy_params: Caller-supplied strategy parameters.
+            df_train: In-sample bars available for model training.
+            symbol: Market symbol represented by the training bars.
+            timeframe: Market-bar timeframe.
+            window_tag: Identifier used to isolate the model artifact.
+
+        Returns:
+            A copied parameter mapping, including the ML model path when
+            applicable.
+
+        Raises:
+            ValueError: If an ML model is required but fewer than 50 training
+                bars are available.
+        """
         active_params = strategy_params.copy()
 
         if strategy_id == "ml_inference":
@@ -57,7 +99,7 @@ class WalkForwardEngine:
             wf_models_dir.mkdir(parents=True, exist_ok=True)
             expected_model_path = wf_models_dir / f"{temp_model_id}_model.joblib"
 
-            # 1. Comprobación de caché en disco para evitar reentrenamiento
+            # Reuse the cached model to avoid retraining the same window.
             if expected_model_path.exists():
                 active_params["model_path"] = str(expected_model_path)
                 return active_params
@@ -117,6 +159,34 @@ class WalkForwardEngine:
         slippage_bps: float = 2.0,
         gap_slippage_enabled: bool = True,
     ) -> dict[str, Any]:
+        """Run expanding-window training and rolling out-of-sample evaluation.
+
+        Args:
+            symbol: Market symbol to evaluate.
+            start_date: Inclusive market-data start date.
+            end_date: Inclusive market-data end date.
+            strategy_id: Registry identifier for the strategy.
+            strategy_params: Parameters used to construct the strategy.
+            timeframe: Market-bar timeframe.
+            initial_capital: Starting capital for the evaluation.
+            train_duration_months: Initial training-window duration in months.
+            test_step_months: Duration of each test window in months.
+            risk_fraction: Fraction of equity risked per position.
+            atr_multiplier_sl: ATR multiplier used for stop-loss sizing.
+            atr_multiplier_tp: ATR multiplier used for take-profit sizing.
+            commission_bps: Variable commission in basis points.
+            commission_fixed: Fixed commission per order.
+            slippage_bps: Execution slippage in basis points.
+            gap_slippage_enabled: Whether stop fills account for price gaps.
+
+        Returns:
+            Out-of-sample performance, robustness, friction, trade, and equity
+            curve results across all evaluation windows.
+
+        Raises:
+            ValueError: If market data is insufficient, no evaluation window can
+                be formed, or no out-of-sample equity points are recorded.
+        """
         strategy_params = (strategy_params or {}).copy()
 
         df = self._fetch_market_data(symbol, start_date, end_date, timeframe=timeframe)
@@ -248,7 +318,7 @@ class WalkForwardEngine:
                 engine.entry_slippages = getattr(prev_engine, "entry_slippages", {})
                 engine.pending_order = getattr(prev_engine, "pending_order", None)
 
-            res = engine.run(df_test)
+            engine.run(df_test)
             all_trades.extend(engine.trades)
 
             for eq_item in engine.equity_history:
@@ -294,7 +364,7 @@ class WalkForwardEngine:
         else:
             validation_status = "OVERFITTED"
 
-        # Cálculo de métricas de fricción operativa compatible con objetos TradeRecord y diccionarios
+        # Support friction metrics from both TradeRecord objects and mappings.
         total_commissions_usd = float(
             sum(
                 (t.get("commission", 0.0) if isinstance(t, dict) else getattr(t, "commission", 0.0))
@@ -359,5 +429,3 @@ class WalkForwardEngine:
             "trades": all_trades,
             "oos_equity_curve": oos_curve,
         }
-
-

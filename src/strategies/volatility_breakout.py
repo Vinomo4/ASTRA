@@ -1,3 +1,5 @@
+"""Regime-filtered Donchian volatility-breakout strategy."""
+
 from __future__ import annotations
 
 from collections import deque
@@ -11,6 +13,8 @@ from src.strategies.registry import StrategyRegistry
 
 @StrategyRegistry.register
 class VolatilityBreakoutStrategy(BaseStrategy):
+    """Trade volume-confirmed breakouts during strong trend regimes."""
+
     id = "regime_volatility_breakout"
     name = "Regime-Filtered Volatility Breakout"
     description = (
@@ -20,6 +24,11 @@ class VolatilityBreakoutStrategy(BaseStrategy):
     category = "Rule-Based"
 
     def __init__(self, **params: Any) -> None:
+        """Initialize breakout periods, thresholds, and bar history.
+
+        Args:
+            **params: Strategy parameter overrides.
+        """
         super().__init__(**params)
         self.channel_period = int(self.get_param("channel_period", 20))
         self.adx_period = int(self.get_param("adx_period", 14))
@@ -34,6 +43,11 @@ class VolatilityBreakoutStrategy(BaseStrategy):
 
     @classmethod
     def get_metadata(cls) -> StrategyMetadata:
+        """Return the volatility-breakout strategy metadata.
+
+        Returns:
+            Strategy identity and configurable regime-filter parameters.
+        """
         return StrategyMetadata(
             id=cls.id,
             name=cls.name,
@@ -118,17 +132,21 @@ class VolatilityBreakoutStrategy(BaseStrategy):
         minus_dm_list = []
 
         for i in range(1, len(bars)):
-            h = highs[i]
-            l = lows[i]
-            prev_c = closes[i - 1]
-            prev_h = highs[i - 1]
-            prev_l = lows[i - 1]
+            current_high = highs[i]
+            current_low = lows[i]
+            previous_close = closes[i - 1]
+            previous_high = highs[i - 1]
+            previous_low = lows[i - 1]
 
-            tr = max(h - l, abs(h - prev_c), abs(l - prev_c))
+            tr = max(
+                current_high - current_low,
+                abs(current_high - previous_close),
+                abs(current_low - previous_close),
+            )
             tr_list.append(tr)
 
-            up_move = h - prev_h
-            down_move = prev_l - l
+            up_move = current_high - previous_high
+            down_move = previous_low - current_low
 
             plus_dm = up_move if up_move > down_move and up_move > 0 else 0.0
             minus_dm = down_move if down_move > up_move and down_move > 0 else 0.0
@@ -167,6 +185,15 @@ class VolatilityBreakoutStrategy(BaseStrategy):
         return float(adx)
 
     def on_bar(self, event: MarketDataEvent) -> SignalEvent | None:
+        """Evaluate a completed bar against breakout and exit conditions.
+
+        Args:
+            event: Completed market bar to append and evaluate.
+
+        Returns:
+            A long signal for a confirmed breakout, an exit signal below the
+            channel midpoint, or ``None`` during warmup or without a trigger.
+        """
         # Minimum history required to compute channels and volume benchmark
         min_required = max(self.channel_period, self.volume_ma_period)
 
@@ -196,17 +223,13 @@ class VolatilityBreakoutStrategy(BaseStrategy):
         # Long Entry: Breakout above prior Donchian High + Trending Market + Volume Spike
         if event.close > donchian_high and adx_value >= self.adx_threshold and volume_confirmed:
             return SignalEvent(
-                timestamp=event.timestamp,
-                symbol=event.symbol,
-                signal_type=SignalType.LONG,
+                timestamp=event.timestamp, symbol=event.symbol, signal_type=SignalType.LONG
             )
 
         # Exit: Price crosses below mid-channel
         if event.close < donchian_mid:
             return SignalEvent(
-                timestamp=event.timestamp,
-                symbol=event.symbol,
-                signal_type=SignalType.EXIT,
+                timestamp=event.timestamp, symbol=event.symbol, signal_type=SignalType.EXIT
             )
 
         return None

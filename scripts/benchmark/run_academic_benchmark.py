@@ -1,21 +1,22 @@
-# scripts/benchmark/run_academic_benchmark.py
+"""Run the academic walk-forward benchmark and write summary artifacts."""
+
 from __future__ import annotations
 
 import json
 from pathlib import Path
 from typing import Any
+
 import pandas as pd
 
-from src.analytics.monte_carlo import MonteCarloSimulator
-from src.backtester.walk_forward import WalkForwardEngine
-from src.data_engine.storage_manager import StorageManager
-
-# Registro de estrategias
+# Register the benchmark strategies.
 import src.strategies.custom_rule_strategy  # noqa: F401
 import src.strategies.mean_reversion  # noqa: F401
 import src.strategies.ml_strategy  # noqa: F401
 import src.strategies.trend_following  # noqa: F401
 import src.strategies.volatility_breakout  # noqa: F401
+from src.analytics.monte_carlo import MonteCarloSimulator
+from src.backtester.walk_forward import WalkForwardEngine
+from src.data_engine.storage_manager import StorageManager
 
 BENCHMARK_ASSETS = ["SPY", "BTC-USD", "ETH-USD"]
 BENCHMARK_TIMEFRAMES = ["1d", "4h"]
@@ -55,16 +56,13 @@ STRATEGIES_TO_TEST = [
     {
         "id": "ml_inference",
         "name": "ML Triple-Barrier Inference",
-        "params": {
-            "threshold_long": 0.60,
-            "threshold_exit": 0.40,
-            "lookback_window": 50,
-        },
+        "params": {"threshold_long": 0.60, "threshold_exit": 0.40, "lookback_window": 50},
     },
 ]
 
 
 def run_benchmark_suite() -> None:
+    """Run every benchmark case and write JSON, Markdown, and LaTeX summaries."""
     storage = StorageManager()
     wf_engine = WalkForwardEngine(storage=storage)
     mc_simulator = MonteCarloSimulator(num_simulations=1000, ruin_threshold_pct=30.0)
@@ -75,22 +73,22 @@ def run_benchmark_suite() -> None:
     summary_records: list[dict[str, Any]] = []
 
     print("\n" + "=" * 95)
-    print("EJECUTANDO SUITE DE BENCHMARK ACADÉMICO WALK-FORWARD (100% OOS + COSTES)")
+    print("RUNNING ACADEMIC WALK-FORWARD BENCHMARK SUITE (100% OOS + COSTS)")
     print("=" * 95)
 
     for asset in BENCHMARK_ASSETS:
         for tf in BENCHMARK_TIMEFRAMES:
-            print(f"\n>>> Activo: {asset} | Temporalidad: {tf} (Evaluación: 2022 -> 2025)")
+            print(f"\n>>> Asset: {asset} | Timeframe: {tf} (Evaluation: 2022 -> 2025)")
 
             for strat_cfg in STRATEGIES_TO_TEST:
                 strat_id = strat_cfg["id"]
                 strat_name = strat_cfg["name"]
                 strat_params = strat_cfg["params"].copy()
 
-                print(f"  -> Evaluando [OOS]: {strat_name:36} ...", end=" ", flush=True)
+                print(f"  -> Evaluating [OOS]: {strat_name:36} ...", end=" ", flush=True)
 
                 try:
-                    # 1. Simulación Rolling Walk-Forward
+                    # 1. Rolling walk-forward simulation.
                     wf_res = wf_engine.run_rolling_walk_forward(
                         symbol=asset,
                         start_date=START_DATE,
@@ -110,11 +108,11 @@ def run_benchmark_suite() -> None:
                         gap_slippage_enabled=True,
                     )
 
-                    # 2. Análisis de Estrés Monte Carlo
+                    # 2. Monte Carlo stress analysis.
                     trades = wf_res.get("trades", [])
                     mc_output = mc_simulator.run(trades, initial_capital=INITIAL_CAPITAL)
 
-                    # 3. Consolidación de métricas de rendimiento y fricción
+                    # 3. Consolidate performance and friction metrics.
                     summary_records.append(
                         {
                             "Asset": asset,
@@ -143,13 +141,13 @@ def run_benchmark_suite() -> None:
                     )
                     print("OK")
                 except Exception as exc:
-                    print(f"FALLO ({exc})")
+                    print(f"FAILED ({exc})")
 
     if not summary_records:
-        print("\n[ALERTA] No se generaron registros en el benchmark.")
+        print("\n[WARNING] The benchmark produced no records.")
         return
 
-    # 4. Generación de artefactos analíticos
+    # 4. Generate analytical artifacts.
     df_results = pd.DataFrame(summary_records)
 
     json_path = output_dir / "academic_benchmark_results.json"
@@ -166,8 +164,8 @@ def run_benchmark_suite() -> None:
         f.write(df_results.to_latex(index=False))
 
     print("\n" + "=" * 95)
-    print("SUITE DE BENCHMARK COMPLETADA")
-    print(f"Artefactos generados exitosamente en:\n  - {json_path}\n  - {md_path}\n  - {tex_path}")
+    print("BENCHMARK SUITE COMPLETED")
+    print(f"Artifacts generated successfully at:\n  - {json_path}\n  - {md_path}\n  - {tex_path}")
     print("=" * 95 + "\n")
 
 

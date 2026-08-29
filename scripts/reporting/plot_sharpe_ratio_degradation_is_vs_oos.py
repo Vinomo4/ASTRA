@@ -1,11 +1,14 @@
+"""Plot in-sample versus out-of-sample Sharpe ratio degradation."""
+
 import os
+
 import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-# Configuración del estilo visual institucional
+# Configure the institutional visual style.
 plt.rcParams.update(
     {
         "font.family": "sans-serif",
@@ -27,50 +30,14 @@ plt.rcParams.update(
     }
 )
 
-# Datos empíricos del benchmark (IS vs OOS)
+# Empirical benchmark data (IS versus OOS).
 ml_data = [
-    {
-        "asset": "SPY (1d)",
-        "is_s": 2.56,
-        "oos_s": 0.14,
-        "offset": (-10, 12),
-        "align": "right",
-    },
-    {
-        "asset": "SPY (4h)",
-        "is_s": 2.76,
-        "oos_s": -0.58,
-        "offset": (-12, -15),
-        "align": "right",
-    },
-    {
-        "asset": "BTC-USD (1d)",
-        "is_s": 3.09,
-        "oos_s": -0.58,
-        "offset": (12, -15),
-        "align": "left",
-    },
-    {
-        "asset": "BTC-USD (4h)",
-        "is_s": 6.04,
-        "oos_s": -0.28,
-        "offset": (-12, 12),
-        "align": "right",
-    },
-    {
-        "asset": "ETH-USD (1d)",
-        "is_s": 3.10,
-        "oos_s": 0.34,
-        "offset": (12, 10),
-        "align": "left",
-    },
-    {
-        "asset": "ETH-USD (4h)",
-        "is_s": 7.20,
-        "oos_s": 0.50,
-        "offset": (-12, 12),
-        "align": "right",
-    },
+    {"asset": "SPY (1d)", "is_s": 2.56, "oos_s": 0.14, "offset": (-10, 12), "align": "right"},
+    {"asset": "SPY (4h)", "is_s": 2.76, "oos_s": -0.58, "offset": (-12, -15), "align": "right"},
+    {"asset": "BTC-USD (1d)", "is_s": 3.09, "oos_s": -0.58, "offset": (12, -15), "align": "left"},
+    {"asset": "BTC-USD (4h)", "is_s": 6.04, "oos_s": -0.28, "offset": (-12, 12), "align": "right"},
+    {"asset": "ETH-USD (1d)", "is_s": 3.10, "oos_s": 0.34, "offset": (12, 10), "align": "left"},
+    {"asset": "ETH-USD (4h)", "is_s": 7.20, "oos_s": 0.50, "offset": (-12, 12), "align": "right"},
 ]
 
 rules_data = [
@@ -81,14 +48,14 @@ rules_data = [
     {"is_s": 0.77, "oos_s": 0.77, "strat": "control"},
     {"is_s": -0.32, "oos_s": -0.32, "strat": "control"},
     {"is_s": -0.10, "oos_s": -0.10, "strat": "control"},
-    # Ruptura por Volatilidad
+    # Volatility Breakout.
     {"is_s": 0.16, "oos_s": 0.16, "strat": "breakout"},
     {"is_s": -0.40, "oos_s": -0.40, "strat": "breakout"},
     {"is_s": 0.80, "oos_s": 0.80, "strat": "breakout"},
     {"is_s": 0.93, "oos_s": 0.93, "strat": "breakout"},
     {"is_s": 0.56, "oos_s": 0.56, "strat": "breakout"},
     {"is_s": 0.71, "oos_s": 0.71, "strat": "breakout"},
-    # Reversión a la Media
+    # Mean Reversion.
     {"is_s": 0.44, "oos_s": 0.44, "strat": "reversion"},
     {"is_s": 0.39, "oos_s": 0.39, "strat": "reversion"},
     {"is_s": -0.13, "oos_s": -0.13, "strat": "reversion"},
@@ -101,7 +68,7 @@ fig, ax = plt.subplots(figsize=(8.5, 5.5), dpi=300)
 ax.set_facecolor("#ffffff")
 fig.patch.set_facecolor("#ffffff")
 
-# Línea de paridad teórica
+# Theoretical parity line.
 x_line = np.linspace(-1.0, 7.8, 200)
 ax.plot(
     x_line,
@@ -109,35 +76,31 @@ ax.plot(
     color="#7f7f7f",
     linestyle="--",
     linewidth=1.2,
-    label="Paridad In-Sample = Out-of-Sample ($y = x$)",
+    label="In-Sample = Out-of-Sample Parity ($y = x$)",
     zorder=2,
 )
 
-# Sombreado de degradación
+# Degradation shading.
 ax.fill_between(
     x_line,
     -1.5,
     x_line,
     color="#d62728",
     alpha=0.06,
-    label="Zona de Degradación de Rendimiento ($WFER < 1.0$)",
+    label="Performance Degradation Zone ($WFER < 1.0$)",
     zorder=1,
 )
 
-# Línea de referencia OOS = 0
+# OOS = 0 reference line.
 ax.axhline(0, color="#b0b0b0", linestyle=":", linewidth=1.0, zorder=2)
 
-# Mapeo de estilos para estrategias basadas en reglas
-colors = {
-    "control": "#1f77b4",
-    "breakout": "#ff7f0e",
-    "reversion": "#2ca02c",
-}
+# Map styles for rule-based strategies.
+colors = {"control": "#1f77b4", "breakout": "#ff7f0e", "reversion": "#2ca02c"}
 markers = {"control": "s", "breakout": "D", "reversion": "o"}
 names = {
-    "control": "Seguimiento de Tendencia (Control)",
-    "breakout": "Ruptura Volatilidad",
-    "reversion": "Reversión a la Media",
+    "control": "Trend Following (Control)",
+    "breakout": "Volatility Breakout",
+    "reversion": "Mean Reversion",
 }
 
 for st in ["control", "breakout", "reversion"]:
@@ -155,7 +118,7 @@ for st in ["control", "breakout", "reversion"]:
         zorder=4,
     )
 
-# Modelos de Machine Learning
+# Machine learning models.
 ax.scatter(
     [m["is_s"] for m in ml_data],
     [m["oos_s"] for m in ml_data],
@@ -164,11 +127,11 @@ ax.scatter(
     linewidths=1.0,
     s=85,
     marker="^",
-    label="ML Triple-Barrier (Supervisado)",
+    label="ML Triple-Barrier (Supervised)",
     zorder=5,
 )
 
-# Etiquetas de texto con flechas sobre modelos de ML
+# Annotate ML models with arrowed labels.
 for m in ml_data:
     ax.annotate(
         m["asset"],
@@ -190,29 +153,20 @@ for m in ml_data:
         zorder=6,
     )
 
-# Configuración de límites y etiquetas
+# Configure limits and labels.
 ax.set_xlim(-1.0, 7.8)
 ax.set_ylim(-1.0, 1.8)
-ax.set_xlabel("Ratio de Sharpe In-Sample (Entrenamiento / Calibración)")
-ax.set_ylabel("Ratio de Sharpe Out-of-Sample (Evaluación Continua)")
-ax.set_title(
-    "Degradación del Rendimiento: Ratio de Sharpe In-Sample frente a Out-of-Sample",
-    pad=12,
-)
+ax.set_xlabel("In-Sample Sharpe Ratio (Training / Calibration)")
+ax.set_ylabel("Out-of-Sample Sharpe Ratio (Continuous Evaluation)")
+ax.set_title("Performance Degradation: In-Sample versus Out-of-Sample Sharpe Ratio", pad=12)
 
-# Leyenda ubicada en el cuadrante superior izquierdo (área despejada)
-ax.legend(
-    loc="upper left",
-    frameon=True,
-    facecolor="#ffffff",
-    edgecolor="#e0e0e0",
-    framealpha=0.95,
-)
+# Place the legend in the clear upper-left quadrant.
+ax.legend(loc="upper left", frameon=True, facecolor="#ffffff", edgecolor="#e0e0e0", framealpha=0.95)
 
 ax.grid(True)
 plt.tight_layout()
 
-# Directorio de salida y guardado
+# Create the output directory and save the chart.
 output_dir = os.path.join("reports", "plots")
 os.makedirs(output_dir, exist_ok=True)
 output_path = os.path.join(output_dir, "sharpe_ratio_degradation_is_vs_oos.png")

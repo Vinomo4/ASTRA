@@ -1,4 +1,5 @@
-# src/backtester/event_engine.py
+"""Event queue and event-driven historical simulation engine."""
+
 from __future__ import annotations
 
 from collections import deque
@@ -22,13 +23,26 @@ def _serialize_timestamp(timestamp: Any) -> str:
 
 
 class EventEngine:
+    """Store events in first-in, first-out order until consumed."""
+
     def __init__(self) -> None:
+        """Initialize an empty event queue."""
         self.queue: deque[Event] = deque()
 
     def put(self, event: Event) -> None:
+        """Append an event to the queue.
+
+        Args:
+            event: Event to enqueue.
+        """
         self.queue.append(event)
 
     def run(self) -> list[Event]:
+        """Drain queued events in insertion order.
+
+        Returns:
+            All queued events in first-in, first-out order.
+        """
         events: list[Event] = []
         while self.queue:
             events.append(self.queue.popleft())
@@ -36,6 +50,8 @@ class EventEngine:
 
 
 class BacktestEngine:
+    """Simulate strategy execution over historical market bars."""
+
     def __init__(
         self,
         strategy: BaseStrategy,
@@ -49,6 +65,19 @@ class BacktestEngine:
         slippage_bps: float = 2.0,
         gap_slippage_enabled: bool = True,
     ) -> None:
+        """Initialize the historical simulation engine.
+
+        Args:
+            strategy: Strategy evaluated once per market bar.
+            initial_capital: Starting simulation capital.
+            risk_fraction: Fraction of equity risked per position.
+            atr_multiplier_sl: ATR multiplier used for stop-loss sizing.
+            atr_multiplier_tp: ATR multiplier used for take-profit sizing.
+            commission_bps: Variable commission in basis points.
+            commission_fixed: Fixed commission per order.
+            slippage_bps: Execution slippage in basis points.
+            gap_slippage_enabled: Whether stop fills account for price gaps.
+        """
         self.strategy = strategy
         self.initial_capital = initial_capital
         self.capital = initial_capital
@@ -147,6 +176,16 @@ class BacktestEngine:
         self.entry_nominal_prices.pop(position.symbol, None)
 
     def run(self, df: pd.DataFrame) -> dict[str, Any]:
+        """Run the strategy over chronological market bars.
+
+        Args:
+            df: Market bars containing timestamp, symbol, OHLC, and volume
+                columns, with an optional ATR column.
+
+        Returns:
+            Performance metrics, trade records, executions, position state,
+            portfolio snapshots, and the equity curve.
+        """
         data = df.copy().sort_values("timestamp").reset_index(drop=True)
         if "atr" not in data.columns:
             data["atr"] = TechnicalFeatures.calculate_atr(data, period=14).bfill()

@@ -1,6 +1,7 @@
 // src/components/TradeAuditTable.tsx
 import { memo } from 'react';
 import type { TradeItem } from '../types';
+import { formatAdaptiveDate, formatCurrency, formatNumber, formatPercent } from '../utils/formatters';
 
 const getExitBadge = (reason: string) => {
   switch (reason) {
@@ -9,37 +10,37 @@ const getExitBadge = (reason: string) => {
     case 'STOP_LOSS':
       return <span className="bg-rose-500/20 border border-rose-500/40 text-rose-300 font-semibold px-2 py-0.5 rounded text-[10px]">STOP LOSS</span>;
     default:
-      return <span className="bg-indigo-500/20 border border-indigo-500/40 text-indigo-300 font-semibold px-2 py-0.5 rounded text-[10px]">SIGNAL EXIT</span>;
+      return <span className="bg-indigo-500/20 border border-indigo-500/40 text-indigo-300 font-semibold px-2 py-0.5 rounded text-[10px]">SALIDA POR SEÑAL</span>;
   }
 };
 
 export const TradeAuditTable = memo(({ trades }: { trades: TradeItem[] }) => (
   <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
     <div className="p-4 border-b border-slate-800 flex justify-between items-center">
-      <h2 className="text-base font-semibold text-white">Closed Trades Audit Log</h2>
-      <span className="text-xs text-slate-400">Total Closed: {trades.length} positions</span>
+      <h2 className="text-base font-semibold text-white">Registro de auditoría de operaciones cerradas</h2>
+      <span className="text-xs text-slate-400">Total cerradas: {formatNumber(trades.length, 0, 0)} posiciones</span>
     </div>
     <div className="max-h-[32rem] overflow-auto">
       <table className="w-full text-left text-sm">
         <thead className="sticky top-0 z-10 bg-slate-800 text-slate-400 text-xs uppercase font-semibold shadow-sm">
           <tr>
             <th className="p-3">ID</th>
-            <th className="p-3">Symbol</th>
-            <th className="p-3">Exit Trigger</th>
-            <th className="p-3">Entry / Exit Date</th>
-            <th className="p-3">Execution Prices (Eff)</th>
-            <th className="p-3">Units</th>
-            <th className="p-3">Gross P&L</th>
-            <th className="p-3">Frictions (Fees + Slip)</th>
-            <th className="p-3">Net P&L ($)</th>
-            <th className="p-3">Net Return (%)</th>
+            <th className="p-3">Símbolo</th>
+            <th className="p-3">Motivo de salida</th>
+            <th className="p-3">Fecha de entrada / salida</th>
+            <th className="p-3">Precios de ejecución (efectivos)</th>
+            <th className="p-3">Unidades</th>
+            <th className="p-3">P&L bruto</th>
+            <th className="p-3">Fricciones (comisiones + slippage)</th>
+            <th className="p-3">P&L neto (USD)</th>
+            <th className="p-3">Rentabilidad neta (%)</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-800 font-mono text-xs">
           {trades.length === 0 ? (
             <tr>
               <td colSpan={10} className="p-4 text-center text-slate-500 font-sans">
-                No closed trades completed in this date range.
+                No se cerraron operaciones en este intervalo de fechas.
               </td>
             </tr>
           ) : (
@@ -56,26 +57,26 @@ export const TradeAuditTable = memo(({ trades }: { trades: TradeItem[] }) => (
                   <td className="p-3 font-semibold text-white font-sans">{t.symbol}</td>
                   <td className="p-3 font-sans">{getExitBadge(t.exit_reason)}</td>
                   <td className="p-3 text-slate-300">
-                    <div>{typeof t.entry_time === 'string' ? t.entry_time.split('T')[0] : String(t.entry_time)}</div>
-                    <div className="text-slate-500 text-[11px]">{typeof t.exit_time === 'string' ? t.exit_time.split('T')[0] : String(t.exit_time)}</div>
+                    <div>{formatAdaptiveDate(t.entry_time, false)}</div>
+                    <div className="text-slate-500 text-[11px]">{formatAdaptiveDate(t.exit_time, false)}</div>
                   </td>
                   <td className="p-3 text-slate-300">
-                    <div>In: ${effEntry.toFixed(2)}</div>
-                    <div className="text-slate-400 text-[11px]">Out: ${effExit.toFixed(2)}</div>
+                    <div>Entrada: {formatCurrency(effEntry)}</div>
+                    <div className="text-slate-400 text-[11px]">Salida: {formatCurrency(effExit)}</div>
                   </td>
-                  <td className="p-3 text-slate-300">{t.quantity}</td>
+                  <td className="p-3 text-slate-300">{formatNumber(t.quantity, 0, 8)}</td>
                   <td className={`p-3 ${gross >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                    ${gross.toFixed(2)}
+                    {formatCurrency(gross)}
                   </td>
                   <td className="p-3 text-slate-400">
-                    <div className="text-rose-400/90">-${(fees + slip).toFixed(2)}</div>
-                    <div className="text-[10px] text-slate-500">Fees: ${fees.toFixed(2)}</div>
+                    <div className="text-rose-400/90">{formatCurrency(-(fees + slip))}</div>
+                    <div className="text-[10px] text-slate-500">Comisiones: {formatCurrency(fees)}</div>
                   </td>
                   <td className={`p-3 font-semibold ${t.pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                    ${t.pnl.toFixed(2)}
+                    {formatCurrency(t.pnl)}
                   </td>
                   <td className={`p-3 font-semibold ${t.pnl_pct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                    {t.pnl_pct >= 0 ? '+' : ''}{t.pnl_pct.toFixed(2)}%
+                    {formatPercent(t.pnl_pct)}
                   </td>
                 </tr>
               );

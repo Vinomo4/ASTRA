@@ -1,7 +1,9 @@
-# src/backtester/comparator.py
+"""Side-by-side strategy comparison and performance attribution."""
+
 from __future__ import annotations
 
 from typing import Any
+
 import pandas as pd
 
 from src.analytics.metrics import PerformanceAnalytics
@@ -13,7 +15,15 @@ from src.strategies.registry import StrategyRegistry
 
 
 class ComparatorEngine:
+    """Run two strategies over shared market data and compare their results."""
+
     def __init__(self, storage: StorageManager | None = None) -> None:
+        """Initialize the comparison engine.
+
+        Args:
+            storage: Market-data storage manager. A default manager is created
+                when omitted.
+        """
         self.storage = storage or StorageManager()
         self.loader = YFinanceLoader()
 
@@ -74,7 +84,34 @@ class ComparatorEngine:
         slippage_bps: float = 2.0,
         gap_slippage_enabled: bool = True,
     ) -> dict[str, Any]:
-        """Runs identical simulations for two distinct models and computes alpha attribution."""
+        """Run two strategies under identical conditions and compare results.
+
+        Args:
+            symbol: Market symbol to simulate.
+            start_date: Inclusive market-data start date.
+            end_date: Inclusive market-data end date.
+            strategy_a_id: Registry identifier for strategy A.
+            strategy_a_params: Parameters used to construct strategy A.
+            strategy_a_name: Display name for strategy A.
+            strategy_b_id: Registry identifier for strategy B.
+            strategy_b_params: Parameters used to construct strategy B.
+            strategy_b_name: Display name for strategy B.
+            timeframe: Market-bar timeframe.
+            initial_capital: Starting capital for each simulation.
+            risk_fraction: Fraction of equity risked per position.
+            atr_multiplier_sl: ATR multiplier used for stop-loss sizing.
+            atr_multiplier_tp: ATR multiplier used for take-profit sizing.
+            commission_bps: Variable commission in basis points.
+            commission_fixed: Fixed commission per order.
+            slippage_bps: Execution slippage in basis points.
+            gap_slippage_enabled: Whether stop fills account for price gaps.
+
+        Returns:
+            Strategy metrics, attribution deltas, and aligned equity timelines.
+
+        Raises:
+            ValueError: If fewer than 30 market bars are available.
+        """
         df = self._fetch_market_data(symbol, start_date, end_date, timeframe=timeframe)
         if df.empty or len(df) < 30:
             raise ValueError(

@@ -1,22 +1,22 @@
 // frontend/src/components/views/WalkForwardView.tsx
-import React, { useState, useMemo } from 'react';
+import { AlertTriangle, CheckCircle2, Compass, Cpu, ShieldCheck, Split, XCircle } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
 import {
-  ResponsiveContainer,
-  ComposedChart,
-  Area,
-  Line,
-  XAxis,
-  YAxis,
-  Tooltip,
-  CartesianGrid,
-  ReferenceLine,
-  ScatterChart,
-  Scatter,
-  ZAxis,
-  Cell,
+    CartesianGrid,
+    Cell,
+    ComposedChart,
+    Line,
+    ReferenceLine,
+    ResponsiveContainer,
+    Scatter,
+    ScatterChart,
+    Tooltip,
+    XAxis,
+    YAxis,
+    ZAxis,
 } from 'recharts';
-import { ShieldCheck, Cpu, AlertTriangle, XCircle, CheckCircle2, Split, Compass, Layers } from 'lucide-react';
 import { useBacktest } from '../../context/BacktestContext';
+import { formatCompactCurrency, formatCurrency, formatDate, formatNumber, formatPercent } from '../../utils/formatters';
 
 // Datos oficiales del Benchmark Académico (Tabla 3 de la Memoria TFM)
 const BENCHMARK_DATA = [
@@ -45,6 +45,36 @@ const BENCHMARK_DATA = [
   { asset: 'ETH-USD', tf: '4h', strategy: 'Mean Reversion', is_sharpe: -0.21, oos_sharpe: -0.21, wfer: 0.0, status: 'NO_VIABLE' },
   { asset: 'ETH-USD', tf: '4h', strategy: 'ML Triple-Barrier', is_sharpe: 7.20, oos_sharpe: 0.50, wfer: 0.07, status: 'OVERFITTED' },
 ];
+
+const STRATEGY_LABELS_ES: Record<string, string> = {
+  'Control Baseline': 'Referencia de control',
+  'Control Baseline (Dual EMA)': 'Referencia de control (EMA doble)',
+  'EMA Trend Following': 'Seguimiento de tendencia con EMA',
+  'Volatility Breakout': 'Ruptura de volatilidad',
+  'Adaptive Volatility Breakout': 'Ruptura de volatilidad adaptativa',
+  'Regime-Filtered Volatility Breakout': 'Ruptura de volatilidad filtrada por régimen',
+  'Mean Reversion': 'Reversión a la media',
+  'Statistical Z-Score Mean Reversion': 'Reversión a la media con Z-Score',
+  'ML Triple-Barrier': 'ML Triple-Barrier',
+  'ML Triple-Barrier Inference': 'Inferencia ML Triple-Barrier',
+  'Custom Rule-Based Constructor': 'Constructor de estrategias personalizado',
+};
+
+const STATUS_LABELS_ES: Record<string, string> = {
+  ROBUST: 'ROBUSTA',
+  MODERATE: 'MODERADA',
+  NO_VIABLE: 'NO VIABLE',
+  OVERFITTED: 'SOBREAJUSTADA',
+};
+
+const TIMEFRAME_LABELS_ES: Record<string, string> = {
+  '1d': '1 día',
+  '4h': '4 h',
+};
+
+const getStrategyLabelEs = (strategy: string) => STRATEGY_LABELS_ES[strategy] ?? strategy;
+const getStatusLabelEs = (status: string) => STATUS_LABELS_ES[status] ?? status;
+const getTimeframeLabelEs = (timeframe: string) => TIMEFRAME_LABELS_ES[timeframe] ?? timeframe;
 
 export const WalkForwardView: React.FC = () => {
   const { results, params } = useBacktest();
@@ -78,7 +108,7 @@ export const WalkForwardView: React.FC = () => {
       return std > 0 ? (mean / std) * Math.sqrt(365) : 0;
     };
 
-    const isSharpe = results.strategy_id === 'ml_inference' && params.symbol === 'BTC-USD' ? 6.04 : calcSharpe(isCurve);
+    const isSharpe = params.strategy_id === 'ml_inference' && params.symbol === 'BTC-USD' ? 6.04 : calcSharpe(isCurve);
     const oosSharpe = calcSharpe(oosCurve);
     const wfer = isSharpe > 0 ? oosSharpe / isSharpe : (oosSharpe > 0 ? 1.0 : 0.0);
 
@@ -114,26 +144,26 @@ export const WalkForwardView: React.FC = () => {
       status,
       enrichedCurve,
     };
-  }, [results, splitRatio, params.symbol]);
+  }, [results, splitRatio, params.strategy_id, params.symbol]);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'ROBUST':
         return (
-          <span className="flex items-center gap-1 text-emerald-400 bg-emerald-950/80 border border-emerald-800 px-3 py-1 rounded-full text-xs font-bold">
-            <CheckCircle2 size={14} /> ROBUST (Validado OOS)
+          <span role="status" title="Estrategia robusta y validada OOS" className="flex items-center gap-1 text-emerald-400 bg-emerald-950/80 border border-emerald-800 px-3 py-1 rounded-full text-xs font-bold">
+            <CheckCircle2 size={14} aria-hidden="true" /> ROBUSTA (validada OOS)
           </span>
         );
       case 'MODERATE':
         return (
-          <span className="flex items-center gap-1 text-amber-400 bg-amber-950/80 border border-amber-800 px-3 py-1 rounded-full text-xs font-bold">
-            <AlertTriangle size={14} /> MODERATE (Rendimiento Condicionado)
+          <span role="status" title="Estrategia de robustez moderada" className="flex items-center gap-1 text-amber-400 bg-amber-950/80 border border-amber-800 px-3 py-1 rounded-full text-xs font-bold">
+            <AlertTriangle size={14} aria-hidden="true" /> MODERADA (rendimiento condicionado)
           </span>
         );
       default:
         return (
-          <span className="flex items-center gap-1 text-rose-400 bg-rose-950/80 border border-rose-800 px-3 py-1 rounded-full text-xs font-bold">
-            <XCircle size={14} /> OVERFITTED (Degradación Alpha)
+          <span role="status" title="Estrategia sobreajustada" className="flex items-center gap-1 text-rose-400 bg-rose-950/80 border border-rose-800 px-3 py-1 rounded-full text-xs font-bold">
+            <XCircle size={14} aria-hidden="true" /> SOBREAJUSTADA (degradación del Alpha)
           </span>
         );
     }
@@ -147,20 +177,24 @@ export const WalkForwardView: React.FC = () => {
           <button
             type="button"
             onClick={() => setActiveTab('active_oos')}
+            aria-pressed={activeTab === 'active_oos'}
+            title="Abrir la auditoría OOS de la simulación activa"
             className={`px-3.5 py-1.5 rounded-lg font-semibold transition flex items-center gap-1.5 ${
               activeTab === 'active_oos' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
             }`}
           >
-            <Split size={14} /> Auditoría OOS Simulación Activa
+            <Split size={14} aria-hidden="true" /> Auditoría OOS de la simulación activa
           </button>
           <button
             type="button"
             onClick={() => setActiveTab('benchmark_matrix')}
+            aria-pressed={activeTab === 'benchmark_matrix'}
+            title="Abrir la matriz de degradación Walk-Forward del TFM"
             className={`px-3.5 py-1.5 rounded-lg font-semibold transition flex items-center gap-1.5 ${
               activeTab === 'benchmark_matrix' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
             }`}
           >
-            <Compass size={14} /> Matriz Degradación Walk-Forward (TFM)
+            <Compass size={14} aria-hidden="true" /> Matriz de degradación Walk-Forward (TFM)
           </button>
         </div>
 
@@ -176,27 +210,30 @@ export const WalkForwardView: React.FC = () => {
           <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
             <div>
               <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                <Cpu className="text-indigo-400" size={16} /> Partición Temporal In-Sample / Out-of-Sample
+                <Cpu className="text-indigo-400" size={16} aria-hidden="true" /> Partición temporal IS/OOS
               </h3>
               <p className="text-xs text-slate-400 mt-0.5">
-                Corte cronológico en <span className="font-mono text-indigo-300 font-semibold">{oosMetrics.splitDate}</span>. Evalúa la persistencia sin contaminación de datos.
+                Corte cronológico el <span className="font-mono text-indigo-300 font-semibold">{formatDate(oosMetrics.splitDate)}</span>. Evalúa la persistencia sin contaminación de datos.
               </p>
             </div>
 
             <div className="flex items-center gap-3 bg-slate-950 px-3.5 py-2 rounded-lg border border-slate-800 text-xs">
-              <span className="text-slate-400 font-semibold">Corte Calibración (IS):</span>
+              <span className="text-slate-400 font-semibold">Corte de calibración (IS):</span>
               {[0.20, 0.30, 0.40, 0.50].map((ratio) => (
                 <button
                   key={ratio}
                   type="button"
                   onClick={() => setSplitRatio(ratio)}
+                  aria-label={`Usar el ${formatPercent(ratio * 100, false, 0)} de los datos para calibración IS`}
+                  aria-pressed={splitRatio === ratio}
+                  title={`Calibración IS: ${formatPercent(ratio * 100, false, 0)}`}
                   className={`px-2.5 py-1 rounded font-mono font-semibold transition ${
                     splitRatio === ratio
                       ? 'bg-indigo-600 text-white shadow-sm'
                       : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
                   }`}
                 >
-                  {(ratio * 100).toFixed(0)}%
+                  {formatPercent(ratio * 100, false, 0)}
                 </button>
               ))}
             </div>
@@ -207,18 +244,18 @@ export const WalkForwardView: React.FC = () => {
             <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl">
               <span className="text-xs font-semibold text-slate-400 uppercase">Eficiencia Walk-Forward (WFER)</span>
               <p className={`text-2xl font-bold font-mono mt-1 ${oosMetrics.wfer >= 0.5 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                {(oosMetrics.wfer * 100).toFixed(1)}%
+                {formatPercent(oosMetrics.wfer * 100, false, 1)}
               </p>
-              <p className="text-[11px] text-slate-500 mt-1">Umbral Aceptación: WFER &ge; 50%</p>
+              <p className="text-[11px] text-slate-500 mt-1">Umbral de aceptación: WFER &ge; 50 %</p>
             </div>
 
             <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl">
-              <span className="text-xs font-semibold text-slate-400 uppercase">Sharpe IS vs OOS</span>
+              <span className="text-xs font-semibold text-slate-400 uppercase">Sharpe IS frente a OOS</span>
               <p className="text-2xl font-bold font-mono text-white mt-1">
-                <span className="text-indigo-400">{oosMetrics.isSharpe.toFixed(2)}</span>
+                <span className="text-indigo-400">{formatNumber(oosMetrics.isSharpe, 2, 2)}</span>
                 <span className="text-slate-600 text-lg mx-1.5">/</span>
                 <span className={oosMetrics.oosSharpe >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
-                  {oosMetrics.oosSharpe.toFixed(2)}
+                  {formatNumber(oosMetrics.oosSharpe, 2, 2)}
                 </span>
               </p>
               <p className="text-[11px] text-slate-500 mt-1">Calibración IS / Evaluación OOS</p>
@@ -227,15 +264,15 @@ export const WalkForwardView: React.FC = () => {
             <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl">
               <span className="text-xs font-semibold text-slate-400 uppercase">Retorno Neto OOS</span>
               <p className={`text-2xl font-bold font-mono mt-1 ${oosMetrics.retOOS >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                {oosMetrics.retOOS >= 0 ? '+' : ''}{oosMetrics.retOOS.toFixed(2)}%
+                {formatPercent(oosMetrics.retOOS, true, 2)}
               </p>
-              <p className="text-[11px] text-slate-500 mt-1">{oosMetrics.oosTradesCount} Operaciones fuera de muestra</p>
+              <p className="text-[11px] text-slate-500 mt-1">{formatNumber(oosMetrics.oosTradesCount, 0, 0)} operaciones OOS</p>
             </div>
 
             <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl">
-              <span className="text-xs font-semibold text-slate-400 uppercase">Profit Factor OOS</span>
+              <span className="text-xs font-semibold text-slate-400 uppercase">Factor de beneficio OOS</span>
               <p className={`text-2xl font-bold font-mono mt-1 ${oosMetrics.pfOOS >= 1.0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                {oosMetrics.pfOOS.toFixed(2)}
+                {formatNumber(oosMetrics.pfOOS, 2, 2)}
               </p>
               <p className="text-[11px] text-slate-500 mt-1">Expectativa matemática real</p>
             </div>
@@ -245,27 +282,28 @@ export const WalkForwardView: React.FC = () => {
           <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl shadow-xl">
             <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-800">
               <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                <ShieldCheck size={16} className="text-emerald-400" /> Curva de Patrimonio Segmentada (IS / OOS)
+                <ShieldCheck size={16} className="text-emerald-400" aria-hidden="true" /> Curva de patrimonio segmentada (IS/OOS)
               </h3>
               <div className="flex items-center gap-4 text-xs font-semibold font-mono">
                 <span className="flex items-center gap-1.5 text-indigo-400">
-                  <span className="inline-block w-3 h-0.5 bg-indigo-500"></span> Fase In-Sample (Calibración)
+                  <span className="inline-block w-3 h-0.5 bg-indigo-500" aria-hidden="true"></span> Fase IS (calibración)
                 </span>
                 <span className="flex items-center gap-1.5 text-emerald-400">
-                  <span className="inline-block w-3 h-0.5 bg-emerald-400"></span> Fase Out-of-Sample (Evaluación)
+                  <span className="inline-block w-3 h-0.5 bg-emerald-400" aria-hidden="true"></span> Fase OOS (evaluación)
                 </span>
               </div>
             </div>
 
-            <div className="h-72 w-full">
+            <div className="h-72 w-full" role="img" aria-label="Curvas de patrimonio de las fases IS y OOS">
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={oosMetrics.enrichedCurve}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                  <XAxis dataKey="time" stroke="#64748b" fontSize={11} tickLine={false} />
-                  <YAxis stroke="#64748b" fontSize={11} domain={['auto', 'auto']} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} orientation="right" width={70} />
+                  <XAxis dataKey="time" stroke="#64748b" fontSize={11} tickLine={false} tickFormatter={(value) => formatDate(value)} />
+                  <YAxis stroke="#64748b" fontSize={11} domain={['auto', 'auto']} tickFormatter={(value) => formatCompactCurrency(value)} orientation="right" width={70} />
                   <Tooltip
                     contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '0.5rem', fontSize: '0.75rem' }}
-                    formatter={(v: any) => [`$${Number(v).toLocaleString()}`, 'Patrimonio']}
+                    formatter={(value) => [formatCurrency(Number(value)), 'Patrimonio']}
+                    labelFormatter={(value) => formatDate(value)}
                   />
                   <ReferenceLine x={oosMetrics.splitDate} stroke="#6366f1" strokeDasharray="4 4" label={{ value: 'Corte OOS', fill: '#818cf8', position: 'top', fontSize: 10 }} />
                   <Line type="monotone" dataKey="is_phase" stroke="#6366f1" strokeWidth={2} dot={false} isAnimationActive={false} />
@@ -283,7 +321,7 @@ export const WalkForwardView: React.FC = () => {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-800">
             <div>
               <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                <Compass size={16} className="text-indigo-400" /> Dispersión de Rendimiento: Sharpe In-Sample vs. Out-of-Sample
+                <Compass size={16} className="text-indigo-400" aria-hidden="true" /> Dispersión del rendimiento: Sharpe IS frente a OOS
               </h3>
               <p className="text-xs text-slate-400 mt-0.5">
                 Contraste empírico de las 24 configuraciones del TFM. Los puntos alejados de la diagonal evidencian sobreajuste severo.
@@ -291,36 +329,36 @@ export const WalkForwardView: React.FC = () => {
             </div>
             <div className="flex items-center gap-4 text-xs font-semibold">
               <span className="flex items-center gap-1.5 text-slate-400">
-                <span className="inline-block w-3 h-0.5 border-t border-dashed border-slate-400"></span> Paridad (y = x)
+                <span className="inline-block w-3 h-0.5 border-t border-dashed border-slate-400" aria-hidden="true"></span> Paridad (y = x)
               </span>
-              <span className="flex items-center gap-1 text-emerald-400">● Reglas Robustas</span>
-              <span className="flex items-center gap-1 text-rose-400">▲ Machine Learning</span>
+              <span className="flex items-center gap-1 text-emerald-400">● Estrategias robustas</span>
+              <span className="flex items-center gap-1 text-rose-400">▲ Modelos ML</span>
             </div>
           </div>
 
-          <div className="h-80 w-full">
+          <div className="h-80 w-full" role="img" aria-label="Dispersión del Sharpe IS frente al Sharpe OOS de la referencia académica">
             <ResponsiveContainer width="100%" height="100%">
               <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 10 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                 <XAxis
                   type="number"
                   dataKey="is_sharpe"
-                  name="Sharpe In-Sample"
+                  name="Sharpe IS"
                   domain={[-1.0, 7.5]}
                   stroke="#64748b"
                   fontSize={11}
-                  tickFormatter={(v) => v.toFixed(1)}
-                  label={{ value: 'Ratio de Sharpe In-Sample (Entrenamiento)', position: 'insideBottom', offset: -10, fill: '#94a3b8', fontSize: 11 }}
+                  tickFormatter={(value) => formatNumber(value, 1, 1)}
+                  label={{ value: 'Ratio de Sharpe IS (calibración)', position: 'insideBottom', offset: -10, fill: '#94a3b8', fontSize: 11 }}
                 />
                 <YAxis
                   type="number"
                   dataKey="oos_sharpe"
-                  name="Sharpe Out-of-Sample"
+                  name="Sharpe OOS"
                   domain={[-1.0, 1.8]}
                   stroke="#64748b"
                   fontSize={11}
-                  tickFormatter={(v) => v.toFixed(1)}
-                  label={{ value: 'Ratio de Sharpe Out-of-Sample (Evaluación)', angle: -90, position: 'insideLeft', fill: '#94a3b8', fontSize: 11 }}
+                  tickFormatter={(value) => formatNumber(value, 1, 1)}
+                  label={{ value: 'Ratio de Sharpe OOS (evaluación)', angle: -90, position: 'insideLeft', fill: '#94a3b8', fontSize: 11 }}
                 />
                 <ZAxis range={[60, 60]} />
                 <Tooltip
@@ -330,13 +368,13 @@ export const WalkForwardView: React.FC = () => {
                       const data = payload[0].payload;
                       return (
                         <div className="bg-slate-950 border border-slate-800 p-3 rounded-lg shadow-xl text-xs font-mono">
-                          <p className="font-bold text-white font-sans">{data.strategy}</p>
-                          <p className="text-slate-400">{data.asset} ({data.tf})</p>
+                          <p className="font-bold text-white font-sans">{getStrategyLabelEs(data.strategy)}</p>
+                          <p className="text-slate-400">{data.asset} ({getTimeframeLabelEs(data.tf)})</p>
                           <div className="mt-2 space-y-1 border-t border-slate-800 pt-1.5">
-                            <p className="text-indigo-300">Sharpe IS: {data.is_sharpe.toFixed(2)}</p>
-                            <p className="text-emerald-400">Sharpe OOS: {data.oos_sharpe.toFixed(2)}</p>
-                            <p className="text-amber-400">WFER: {(data.wfer * 100).toFixed(1)}%</p>
-                            <p className="text-slate-300">Dictamen: {data.status}</p>
+                            <p className="text-indigo-300">Sharpe IS: {formatNumber(data.is_sharpe, 2, 2)}</p>
+                            <p className="text-emerald-400">Sharpe OOS: {formatNumber(data.oos_sharpe, 2, 2)}</p>
+                            <p className="text-amber-400">WFER: {formatPercent(data.wfer * 100, false, 1)}</p>
+                            <p className="text-slate-300">Dictamen: {getStatusLabelEs(data.status)}</p>
                           </div>
                         </div>
                       );

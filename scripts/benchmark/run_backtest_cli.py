@@ -1,10 +1,12 @@
-# scripts/run_backtest_cli.py
+"""Run a sample trend-following backtest from the command line."""
+
 from src.backtester.event_engine import BacktestEngine
 from src.data_engine.storage_manager import StorageManager
 from src.strategies.trend_following import TrendFollowingStrategy
 
 
 def main() -> None:
+    """Load AAPL data, run a backtest, and print summary statistics."""
     symbol = "AAPL"
     start_date = "2023-01-01"
     end_date = "2025-01-01"

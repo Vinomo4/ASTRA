@@ -1,6 +1,13 @@
 // frontend/src/types/assets.ts
 export type AssetCategory = 'Crypto' | 'US Equities' | 'Indices & ETFs' | 'Commodities & FX';
 
+export const ASSET_CATEGORY_LABELS: Record<AssetCategory, string> = {
+  Crypto: 'Criptoactivos',
+  'US Equities': 'Acciones de EE. UU.',
+  'Indices & ETFs': 'Índices y ETF',
+  'Commodities & FX': 'Materias primas y divisas',
+};
+
 export interface AssetInfo {
   symbol: string;
   name: string;
@@ -27,14 +34,14 @@ export const ASSET_CATALOG: AssetInfo[] = [
   { symbol: 'META', name: 'Meta Platforms Inc.', category: 'US Equities', exchange: 'NASDAQ' },
 
   // Indices & ETFs
-  { symbol: 'SPY', name: 'SPDR S&P 500 ETF Trust', category: 'Indices & ETFs', exchange: 'NYSE Arca' },
+  { symbol: 'SPY', name: 'ETF SPDR S&P 500', category: 'Indices & ETFs', exchange: 'NYSE Arca' },
   { symbol: 'QQQ', name: 'Invesco QQQ (Nasdaq-100)', category: 'Indices & ETFs', exchange: 'NASDAQ' },
-  { symbol: 'IWM', name: 'iShares Russell 2000 ETF', category: 'Indices & ETFs', exchange: 'NYSE Arca' },
-  { symbol: 'TLT', name: 'iShares 20+ Year Treasury Bond', category: 'Indices & ETFs', exchange: 'NASDAQ' },
+  { symbol: 'IWM', name: 'ETF iShares Russell 2000', category: 'Indices & ETFs', exchange: 'NYSE Arca' },
+  { symbol: 'TLT', name: 'ETF iShares de bonos del Tesoro a más de 20 años', category: 'Indices & ETFs', exchange: 'NASDAQ' },
 
   // Commodities & FX
-  { symbol: 'GLD', name: 'SPDR Gold Shares', category: 'Commodities & FX', exchange: 'NYSE Arca' },
-  { symbol: 'USO', name: 'United States Oil Fund', category: 'Commodities & FX', exchange: 'NYSE Arca' },
-  { symbol: 'EURUSD=X', name: 'Euro / US Dollar', category: 'Commodities & FX', exchange: 'Forex' },
-  { symbol: 'GBPUSD=X', name: 'British Pound / US Dollar', category: 'Commodities & FX', exchange: 'Forex' },
+  { symbol: 'GLD', name: 'ETF SPDR de oro', category: 'Commodities & FX', exchange: 'NYSE Arca' },
+  { symbol: 'USO', name: 'Fondo petrolero de Estados Unidos', category: 'Commodities & FX', exchange: 'NYSE Arca' },
+  { symbol: 'EURUSD=X', name: 'Euro / dólar estadounidense', category: 'Commodities & FX', exchange: 'Divisas' },
+  { symbol: 'GBPUSD=X', name: 'Libra esterlina / dólar estadounidense', category: 'Commodities & FX', exchange: 'Divisas' },
 ];

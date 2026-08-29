@@ -1,4 +1,5 @@
-# src/ml_engine/optimizer.py
+"""Hyperparameter optimization for financial classifiers."""
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -31,9 +32,10 @@ class OptimizationResult:
 
 
 class HyperparameterOptimizer:
-    """
-    Automated hyperparameter tuner for financial classifiers using Optuna
-    and Purged K-Fold validation to prevent overfitting.
+    """Tune financial classifiers with Optuna and purged cross-validation.
+
+    Purged K-fold validation and a post-test embargo reduce temporal leakage
+    while Optuna searches the estimator's hyperparameter space.
     """
 
     def __init__(
@@ -44,6 +46,15 @@ class HyperparameterOptimizer:
         metric: str = "neg_log_loss",
         random_seed: int = 42,
     ) -> None:
+        """Initialize the optimizer.
+
+        Args:
+            n_trials: Maximum number of Optuna trials.
+            n_splits: Number of purged cross-validation folds.
+            pct_embargo: Fraction of observations embargoed after test folds.
+            metric: Objective metric name.
+            random_seed: Seed used by samplers and estimators.
+        """
         self.n_trials = n_trials
         self.n_splits = n_splits
         self.pct_embargo = pct_embargo
@@ -79,8 +90,21 @@ class HyperparameterOptimizer:
         model_type: str = "hist_gb",
         param_sampler: Callable[[optuna.Trial], dict[str, Any]] | None = None,
     ) -> OptimizationResult:
-        """
-        Executes Bayesian hyperparameter search evaluated across PurgedKFold splits.
+        """Run a Bayesian hyperparameter search over purged folds.
+
+        Args:
+            X: Feature matrix.
+            y: Target labels aligned with ``X``.
+            t1: Event end times aligned with ``X``.
+            model_type: Built-in estimator search space to use.
+            param_sampler: Optional custom function that samples trial parameters.
+
+        Returns:
+            Best parameters, score, study, and optimization metadata.
+
+        Raises:
+            ValueError: If ``model_type`` is unsupported and no custom sampler
+                provides parameters for the fallback estimator.
         """
         cv = PurgedKFold(n_splits=self.n_splits, t1=t1, pct_embargo=self.pct_embargo)
         direction = "maximize" if self.metric in {"roc_auc", "accuracy"} else "minimize"

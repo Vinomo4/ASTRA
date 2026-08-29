@@ -1,8 +1,10 @@
-# src/data_engine/binance_loader.py
+"""Load standardized OHLCV data from Binance."""
+
 from __future__ import annotations
 
 import time
 from datetime import datetime
+
 import pandas as pd
 import requests
 
@@ -10,6 +12,8 @@ from src.data_engine.base_loader import BaseDataLoader
 
 
 class BinanceLoader(BaseDataLoader):
+    """Load OHLCV candles from Binance's public REST API."""
+
     BASE_URL = "https://api.binance.com/api/v3/klines"
 
     def _map_symbol(self, symbol: str) -> str:
@@ -29,12 +33,22 @@ class BinanceLoader(BaseDataLoader):
         return "1d"
 
     def fetch_ohlcv(
-        self,
-        symbol: str,
-        start: datetime | str,
-        end: datetime | str,
-        timeframe: str = "1d",
+        self, symbol: str, start: datetime | str, end: datetime | str, timeframe: str = "1d"
     ) -> pd.DataFrame:
+        """Fetch and standardize Binance OHLCV candles.
+
+        Args:
+            symbol: Market symbol, with or without a quote-currency separator.
+            start: Requested start timestamp.
+            end: Requested end timestamp.
+            timeframe: Requested Binance candle interval.
+
+        Returns:
+            Standardized OHLCV rows, or an empty data frame when retrieval fails.
+
+        Raises:
+            ValueError: If a requested timestamp cannot be parsed.
+        """
         binance_symbol = self._map_symbol(symbol)
         interval = self._map_interval(timeframe)
 
@@ -68,7 +82,7 @@ class BinanceLoader(BaseDataLoader):
                 if len(data) < limit:
                     break
 
-                time.sleep(0.05)  # Respeto de límites de API
+                time.sleep(0.05)  # Respect the API rate limit.
             except Exception:
                 break
 

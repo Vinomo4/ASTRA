@@ -1,4 +1,5 @@
-# src/strategies/base_strategy.py
+"""Base interfaces and metadata models for event-driven strategies."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -10,6 +11,8 @@ from src.core.events import MarketDataEvent, SignalEvent
 
 
 class ParameterDefinition(BaseModel):
+    """Describe a configurable strategy parameter for API and UI consumers."""
+
     name: str
     label: str
     param_type: str  # "int" | "float" | "bool" | "str" | "select"
@@ -22,15 +25,17 @@ class ParameterDefinition(BaseModel):
 
 
 class StrategyMetadata(BaseModel):
+    """Describe a strategy and its configurable parameters."""
+
     id: str
     name: str
     description: str
-    category: str = "Rule-Based"  # "Rule-Based" | "ML-Enhanced" | "Statistical"
+    category: str = "Rule-Based"  # "Rule-Based" | "Machine Learning"
     parameters: list[ParameterDefinition] = Field(default_factory=list)
 
 
 class BaseStrategy(ABC):
-    """Abstract Base Class for all event-driven quantitative strategies."""
+    """Define the interface for event-driven quantitative strategies."""
 
     id: str = "base_strategy"
     name: str = "Base Strategy"
@@ -38,19 +43,33 @@ class BaseStrategy(ABC):
     category: str = "Rule-Based"
 
     def __init__(self, **params: Any) -> None:
+        """Initialize a strategy with defaults and caller overrides.
+
+        Args:
+            **params: Strategy-specific parameter overrides.
+        """
         self.params: dict[str, Any] = self._merge_with_defaults(params)
 
     @classmethod
     @abstractmethod
     def get_metadata(cls) -> StrategyMetadata:
-        """Returns the parameter schema and descriptions for UI form rendering."""
+        """Return the strategy metadata and parameter schema.
+
+        Returns:
+            Metadata used for discovery, configuration, and UI rendering.
+        """
         raise NotImplementedError
 
     @abstractmethod
     def on_bar(self, event: MarketDataEvent) -> SignalEvent | None:
-        """
-        Receives a point-in-time MarketDataEvent and returns a SignalEvent
-        (SignalType.LONG or SignalType.EXIT) or None if no action is triggered.
+        """Process one point-in-time market bar.
+
+        Args:
+            event: Completed market bar to evaluate.
+
+        Returns:
+            A long or exit signal when an action is triggered; otherwise
+            ``None``.
         """
         raise NotImplementedError
 
@@ -62,4 +81,13 @@ class BaseStrategy(ABC):
         return defaults
 
     def get_param(self, key: str, default: Any = None) -> Any:
+        """Read a merged strategy parameter.
+
+        Args:
+            key: Parameter key.
+            default: Value returned when the key is absent.
+
+        Returns:
+            The configured parameter value or ``default``.
+        """
         return self.params.get(key, default)

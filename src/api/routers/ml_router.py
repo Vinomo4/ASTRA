@@ -1,4 +1,5 @@
-# src/api/routers/ml_router.py
+"""Expose machine-learning model training and discovery endpoints."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -21,17 +22,23 @@ MODELS_DIR = "models"
 
 @router.post("/train", response_model=MLTrainResponse)
 async def train_ml_model(req: MLTrainRequest) -> MLTrainResponse:
-    """
-    Executes CUSUM filtering, Triple-Barrier labeling, Purged K-Fold
-    cross-validation, and persists the trained estimator artifact.
+    """Train and persist a machine-learning model.
+
+    Training applies CUSUM filtering, triple-barrier labeling, and purged
+    K-fold cross-validation.
+
+    Args:
+        req: Training data range, labeling, validation, and optimization settings.
+
+    Returns:
+        Training status, artifact path, metrics, and model metadata.
+
+    Raises:
+        HTTPException: If training data or configuration is invalid, or training fails.
     """
     try:
         storage = StorageManager()
-        df = storage.load_bars(
-            symbol=req.symbol,
-            start_date=req.start_date,
-            end_date=req.end_date,
-        )
+        df = storage.load_bars(symbol=req.symbol, start_date=req.start_date, end_date=req.end_date)
 
         if df.empty or len(df) < 50:
             raise ValueError(
@@ -70,7 +77,11 @@ async def train_ml_model(req: MLTrainRequest) -> MLTrainResponse:
 
 @router.get("/models", response_model=MLModelListResponse)
 async def list_trained_models() -> MLModelListResponse:
-    """Returns metadata for all persisted model artifacts found in the models directory."""
+    """List metadata for persisted model artifacts.
+
+    Returns:
+        Metadata for readable model artifacts in the models directory.
+    """
     models: list[MLModelInfo] = []
     models_path = Path(MODELS_DIR)
 

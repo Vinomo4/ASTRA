@@ -14,7 +14,7 @@ from src.strategies.registry import StrategyRegistry
 
 @pytest.fixture
 def temp_storage(tmp_path) -> StorageManager:
-    """Instancia aislada de DuckDB por cada ejecución de test."""
+    """Create an isolated DuckDB instance for each test run."""
     db_file = tmp_path / "test_market_database.duckdb"
     return StorageManager(db_path=str(db_file))
 
@@ -42,7 +42,7 @@ def test_unified_data_loader_coverage(
     min_bars: int,
     expected_start_year: int,
 ) -> None:
-    """Verifica que UnifiedDataLoader enruta a la fuente correcta y descarga el histórico completo."""
+    """Verify that UnifiedDataLoader routes and downloads the full history."""
     df = unified_loader.fetch_ohlcv(
         symbol=symbol,
         start="2021-01-01",
@@ -50,15 +50,15 @@ def test_unified_data_loader_coverage(
         timeframe=timeframe,
     )
 
-    assert not df.empty, f"No se obtuvieron datos para {symbol} ({timeframe})"
-    assert len(df) >= min_bars, f"Conteo de barras {len(df)} inferior al umbral mínimo {min_bars}"
+    assert not df.empty, f"No data returned for {symbol} ({timeframe})"
+    assert len(df) >= min_bars, f"Bar count {len(df)} is below the minimum {min_bars}"
 
     required_columns = {"timestamp", "symbol", "open", "high", "low", "close", "volume"}
-    assert required_columns.issubset(df.columns), f"Columnas faltantes en {symbol}"
+    assert required_columns.issubset(df.columns), f"Missing columns for {symbol}"
 
     min_timestamp = pd.to_datetime(df["timestamp"].min(), utc=True)
     assert min_timestamp.year == expected_start_year, (
-        f"Año inicial inesperado: {min_timestamp.year}"
+        f"Unexpected start year: {min_timestamp.year}"
     )
 
 
@@ -66,13 +66,13 @@ def test_duckdb_storage_caching_and_parity(
     temp_storage: StorageManager,
     unified_loader: UnifiedDataLoader,
 ) -> None:
-    """Verifica la persistencia y paridad exacta de lectura/escritura en DuckDB."""
+    """Verify DuckDB persistence and exact read/write parity."""
     symbol = "BTC-USD"
     timeframe = "1d"
     start_date = "2021-01-01"
     end_date = "2025-12-31"
 
-    # 1. Primera llamada: descarga de origen y escritura en DuckDB
+    # 1. First call: fetch from the source and write to DuckDB.
     df_fetched = get_market_data(
         symbol=symbol,
         start_date=start_date,
@@ -83,7 +83,7 @@ def test_duckdb_storage_caching_and_parity(
     )
     assert not df_fetched.empty
 
-    # 2. Segunda llamada: lectura directa desde DuckDB
+    # 2. Second call: read directly from DuckDB.
     df_cached = temp_storage.load_ohlcv(
         symbol=symbol,
         start_date=start_date,
@@ -92,7 +92,7 @@ def test_duckdb_storage_caching_and_parity(
     )
     assert len(df_fetched) == len(df_cached)
 
-    # 3. Comparación numérica exacta de columnas
+    # 3. Compare numeric columns exactly.
     df_fetched_sorted = df_fetched.sort_values("timestamp").reset_index(drop=True)
     df_cached_sorted = df_cached.sort_values("timestamp").reset_index(drop=True)
 
@@ -105,10 +105,7 @@ def test_duckdb_storage_caching_and_parity(
 
 
 def test_walk_forward_monolithic_parity() -> None:
-    """
-    Verifica que la ejecución monolítica directa (BacktestEngine) y la particionada
-    por ventanas continuas (WalkForwardEngine con train=0) produzcan paridad matemática exacta.
-    """
+    """Verify exact parity between direct and partitioned walk-forward runs."""
     wf_engine = WalkForwardEngine()
 
     df = wf_engine._fetch_market_data(
@@ -122,7 +119,7 @@ def test_walk_forward_monolithic_parity() -> None:
         df["timestamp"] = df["timestamp"].dt.tz_convert("UTC").dt.tz_localize(None)
     df = df.sort_values("timestamp").reset_index(drop=True)
 
-    # 1. Ejecución continua directa
+    # 1. Direct continuous execution.
     strat_direct = StrategyRegistry.create("trend_following_ema", fast_period=9, slow_period=21)
     engine_direct = BacktestEngine(
         strategy=strat_direct,
@@ -136,7 +133,7 @@ def test_walk_forward_monolithic_parity() -> None:
     )
     res_direct = engine_direct.run(df)
 
-    # 2. Ejecución rolling walk-forward sin reentrenamiento
+    # 2. Rolling walk-forward execution without retraining.
     res_wf = wf_engine.run_rolling_walk_forward(
         symbol="BTC-USD",
         start_date="2021-01-01",
@@ -155,7 +152,7 @@ def test_walk_forward_monolithic_parity() -> None:
         gap_slippage_enabled=True,
     )
 
-    # Validación de paridad exacta
+    # Validate exact parity.
     assert len(engine_direct.trades) == res_wf["total_trades"]
     assert abs(res_direct["final_equity"] - res_wf["final_equity"]) < 1e-2
     assert abs(res_direct["total_return_pct"] - res_wf["total_return_pct"]) < 1e-4

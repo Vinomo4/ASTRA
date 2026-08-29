@@ -1,4 +1,5 @@
-# src/api/main.py
+"""Configure the FastAPI application and register its routes."""
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 

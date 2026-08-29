@@ -1,4 +1,5 @@
-# src/strategies/trend_following.py
+"""Online exponential-moving-average trend-following strategy."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -11,6 +12,8 @@ from src.strategies.registry import StrategyRegistry
 
 @StrategyRegistry.register
 class TrendFollowingStrategy(BaseStrategy):
+    """Emit signals when the fast and slow online EMAs cross."""
+
     id = "trend_following_ema"
     name = "EMA Trend Following"
     description = (
@@ -19,6 +22,11 @@ class TrendFollowingStrategy(BaseStrategy):
     category = "Rule-Based"
 
     def __init__(self, **params: Any) -> None:
+        """Initialize EMA periods, smoothing constants, and online state.
+
+        Args:
+            **params: Strategy parameter overrides.
+        """
         super().__init__(**params)
         self.fast_ema_period = int(self.get_param("fast_ema", 20))
         self.slow_ema_period = int(self.get_param("slow_ema", 50))
@@ -36,6 +44,11 @@ class TrendFollowingStrategy(BaseStrategy):
 
     @classmethod
     def get_metadata(cls) -> StrategyMetadata:
+        """Return the trend-following strategy metadata.
+
+        Returns:
+            Strategy identity and configurable EMA and ATR periods.
+        """
         return StrategyMetadata(
             id=cls.id,
             name=cls.name,
@@ -76,6 +89,15 @@ class TrendFollowingStrategy(BaseStrategy):
         )
 
     def on_bar(self, event: MarketDataEvent) -> SignalEvent | None:
+        """Update online EMAs and evaluate crossover signals.
+
+        Args:
+            event: Completed market bar to evaluate.
+
+        Returns:
+            A long signal on a bullish crossover, an exit signal on a bearish
+            crossover, or ``None`` when no crossover occurs.
+        """
         price = event.close
 
         # Store prior bar state for crossover detection
@@ -104,17 +126,13 @@ class TrendFollowingStrategy(BaseStrategy):
         # Bullish Crossover: Fast crosses above Slow
         if self._prev_fast_ema <= self._prev_slow_ema and self._fast_ema > self._slow_ema:
             return SignalEvent(
-                timestamp=event.timestamp,
-                symbol=event.symbol,
-                signal_type=SignalType.LONG,
+                timestamp=event.timestamp, symbol=event.symbol, signal_type=SignalType.LONG
             )
 
         # Bearish Crossover: Fast crosses below Slow
         if self._prev_fast_ema >= self._prev_slow_ema and self._fast_ema < self._slow_ema:
             return SignalEvent(
-                timestamp=event.timestamp,
-                symbol=event.symbol,
-                signal_type=SignalType.EXIT,
+                timestamp=event.timestamp, symbol=event.symbol, signal_type=SignalType.EXIT
             )
 
         return None

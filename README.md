@@ -4,7 +4,7 @@ Automated trading research and backtesting system with event-driven architecture
 
 ## Stack
 
-- Python 3.11+
+- Python 3.12
 - uv
 - Pydantic v2, dataclasses
 - Polars, pandas, numpy, numba
@@ -13,7 +13,7 @@ Automated trading research and backtesting system with event-driven architecture
 - pandas-ta, scipy, statsmodels
 - scikit-learn, xgboost, optuna, mlflow
 - quantstats, empyrical-reloaded
-- FastAPI, Uvicorn, WebSockets, Plotly
+- FastAPI, Uvicorn, Plotly
 - React, TypeScript, Vite, Tailwind CSS
 - pytest, ruff, mypy
 

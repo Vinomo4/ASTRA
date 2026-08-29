@@ -1,4 +1,5 @@
-# src/api/schemas/__init__.py
+"""Export request and response schemas for the API."""
+
 from src.api.schemas.backtest import (
     ActivePosition,
     BacktestRequest,

@@ -1,4 +1,5 @@
-# src/api/routers/__init__.py
+"""Assemble the API endpoint routers."""
+
 from fastapi import APIRouter
 
 from src.api.routers.comparison import router as comparison_router

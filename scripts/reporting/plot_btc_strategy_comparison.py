@@ -1,24 +1,24 @@
-# scripts/plot_btc_strategy_comparison.py
+"""Plot BTC-USD walk-forward equity and drawdown by strategy."""
+
 from __future__ import annotations
 
 from pathlib import Path
+
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 
-from src.backtester.walk_forward import WalkForwardEngine
-from src.data_engine.storage_manager import StorageManager
-from src.data_engine.unified_loader import UnifiedDataLoader
-
-# Registro de estrategias
+# Register the compared strategies.
 import src.strategies.custom_rule_strategy  # noqa: F401
 import src.strategies.mean_reversion  # noqa: F401
 import src.strategies.ml_strategy  # noqa: F401
 import src.strategies.trend_following  # noqa: F401
 import src.strategies.volatility_breakout  # noqa: F401
+from src.backtester.walk_forward import WalkForwardEngine
+from src.data_engine.storage_manager import StorageManager
+from src.data_engine.unified_loader import UnifiedDataLoader
 
-# Configuración del benchmark
+# Configure the benchmark.
 ASSET = "BTC-USD"
 TIMEFRAME = "4h"
 START_DATE = "2021-01-01"
@@ -28,7 +28,7 @@ INITIAL_CAPITAL = 100_000.0
 STRATEGIES = [
     {
         "id": "trend_following_ema",
-        "name": "Seguimiento de Tendencia (Control)",
+        "name": "Trend Following (Control)",
         "params": {"fast_ema": 20, "slow_ema": 50},
         "color": "#1f77b4",
         "linestyle": "--",
@@ -36,7 +36,7 @@ STRATEGIES = [
     },
     {
         "id": "regime_volatility_breakout",
-        "name": "Ruptura Volatilidad",
+        "name": "Volatility Breakout",
         "params": {
             "channel_period": 20,
             "adx_period": 14,
@@ -50,7 +50,7 @@ STRATEGIES = [
     },
     {
         "id": "statistical_mean_reversion",
-        "name": "Reversión a la Media",
+        "name": "Mean Reversion",
         "params": {
             "lookback_period": 20,
             "z_entry_threshold": -2.0,
@@ -66,10 +66,7 @@ STRATEGIES = [
     {
         "id": "ml_inference",
         "name": "ML Triple-Barrier",
-        "params": {
-            "threshold_long": 0.60,
-            "threshold_exit": 0.40,
-        },
+        "params": {"threshold_long": 0.60, "threshold_exit": 0.40},
         "color": "#d62728",
         "linestyle": "-.",
         "linewidth": 1.6,
@@ -78,6 +75,7 @@ STRATEGIES = [
 
 
 def plot_btc_strategy_comparison() -> None:
+    """Generate the BTC-USD strategy equity and drawdown comparison chart."""
     storage = StorageManager()
     loader = UnifiedDataLoader()
     output_dir = Path("reports") / "plots"
@@ -93,7 +91,7 @@ def plot_btc_strategy_comparison() -> None:
         strat_name = strat_cfg["name"]
         strat_params = strat_cfg["params"]
 
-        print(f"Ejecutando Rolling Walk-Forward OOS: {strat_name} en {ASSET} ({TIMEFRAME})...")
+        print(f"Running rolling walk-forward OOS: {strat_name} on {ASSET} ({TIMEFRAME})...")
         res = wf_engine.run_rolling_walk_forward(
             symbol=ASSET,
             start_date=START_DATE,
@@ -121,7 +119,7 @@ def plot_btc_strategy_comparison() -> None:
             eq_series = pd.Series(res["equity_curve"])
             eq_series.index = pd.to_datetime(eq_series.index)
         else:
-            raise ValueError(f"No se pudo extraer la curva de patrimonio para {strat_name}.")
+            raise ValueError(f"Could not extract the equity curve for {strat_name}.")
 
         eq_series = eq_series.sort_index()
         norm_equity = (eq_series / INITIAL_CAPITAL) * 100.0
@@ -143,7 +141,7 @@ def plot_btc_strategy_comparison() -> None:
         gridspec_kw={"height_ratios": [2.6, 1.0], "hspace": 0.08},
     )
 
-    # 1. Panel Superior: Curvas de Balance Acumulado (100% OOS)
+    # 1. Upper panel: cumulative equity curves (100% OOS).
     for strat_cfg in STRATEGIES:
         name = strat_cfg["name"]
         ax1.plot(
@@ -157,10 +155,10 @@ def plot_btc_strategy_comparison() -> None:
         )
 
     ax1.axhline(100.0, color="#777777", linestyle=":", linewidth=0.9, alpha=0.7)
-    ax1.set_ylabel("Balance Normalizado (Base = 100)", fontsize=10.5)
+    ax1.set_ylabel("Normalized Equity (Base = 100)", fontsize=10.5)
     ax1.grid(True, linestyle="--", alpha=0.35)
 
-    # Ajuste dinámico de límites del panel superior
+    # Adjust the upper panel limits dynamically.
     min_eq = min(c.min() for c in equity_curves.values())
     max_eq = max(c.max() for c in equity_curves.values())
     ax1.set_ylim(min_eq - 5.0, max_eq + 8.0)
@@ -169,7 +167,7 @@ def plot_btc_strategy_comparison() -> None:
     last_year = equity_curves[STRATEGIES[0]["name"]].index[-1].year
 
     fig.suptitle(
-        f"Evolución del Balance y Perfil de Caídas en {ASSET} ({TIMEFRAME}, {first_year}–{last_year})",
+        f"Equity Evolution and Drawdown Profile for {ASSET} ({TIMEFRAME}, {first_year}-{last_year})",
         fontsize=12.5,
         fontweight="bold",
         y=0.98,
@@ -186,7 +184,7 @@ def plot_btc_strategy_comparison() -> None:
         columnspacing=1.5,
     )
 
-    # 2. Panel Inferior: Curvas de Drawdown
+    # 2. Lower panel: drawdown curves.
     for strat_cfg in STRATEGIES:
         name = strat_cfg["name"]
         ax2.plot(
@@ -201,7 +199,7 @@ def plot_btc_strategy_comparison() -> None:
 
     ax2.axhline(0.0, color="#444444", linestyle="-", linewidth=0.7, alpha=0.5)
     ax2.set_ylabel("Drawdown (%)", fontsize=10.5)
-    ax2.set_xlabel("Fecha", fontsize=10.5)
+    ax2.set_xlabel("Date", fontsize=10.5)
     ax2.grid(True, linestyle="--", alpha=0.35)
 
     min_dd = min(c.min() for c in drawdown_curves.values())
@@ -215,7 +213,7 @@ def plot_btc_strategy_comparison() -> None:
     plt.savefig(output_png, dpi=300, bbox_inches="tight")
     plt.close()
 
-    print(f"\n[ÉXITO] Gráfica guardada en: {output_png.resolve()}")
+    print(f"\n[SUCCESS] Chart saved at: {output_png.resolve()}")
 
 
 if __name__ == "__main__":

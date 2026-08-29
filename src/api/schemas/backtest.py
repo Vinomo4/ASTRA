@@ -1,17 +1,23 @@
-# src/api/schemas/backtest.py
+"""Define backtest request, response, and analytics schemas."""
+
 from __future__ import annotations
 
 from typing import Any
+
 from pydantic import BaseModel, Field
 
 from src.strategies.base_strategy import StrategyMetadata
 
 
 class StrategyListResponse(BaseModel):
+    """Represent metadata for registered strategies."""
+
     strategies: list[StrategyMetadata]
 
 
 class SimulationBandPoint(BaseModel):
+    """Represent Monte Carlo percentiles at one simulated trade step."""
+
     trade_step: int
     p5: float
     p25: float
@@ -21,6 +27,8 @@ class SimulationBandPoint(BaseModel):
 
 
 class MonteCarloAnalytics(BaseModel):
+    """Represent Monte Carlo risk metrics and confidence bands."""
+
     num_simulations: int
     trade_count: int
     median_max_dd_pct: float
@@ -37,6 +45,8 @@ class MonteCarloAnalytics(BaseModel):
 
 
 class BacktestRequest(BaseModel):
+    """Represent strategy, risk, execution, and simulation settings."""
+
     symbol: str
     start_date: str
     end_date: str
@@ -70,10 +80,7 @@ class BacktestRequest(BaseModel):
 
     # Monte Carlo Parameters
     num_simulations: int = Field(
-        default=1_000,
-        ge=100,
-        le=10_000,
-        description="Number of bootstrap resample iterations",
+        default=1_000, ge=100, le=10_000, description="Number of bootstrap resample iterations"
     )
     ruin_threshold_pct: float = Field(
         default=30.0,
@@ -84,6 +91,8 @@ class BacktestRequest(BaseModel):
 
 
 class TradeItem(BaseModel):
+    """Represent one completed simulated trade."""
+
     trade_id: str
     symbol: str
     side: str
@@ -103,6 +112,8 @@ class TradeItem(BaseModel):
 
 
 class OHLCPoint(BaseModel):
+    """Represent one OHLCV market data point."""
+
     time: str
     open: float
     high: float
@@ -112,6 +123,8 @@ class OHLCPoint(BaseModel):
 
 
 class PortfolioSnapshot(BaseModel):
+    """Represent portfolio state at one time point."""
+
     time: str
     equity: float
     cash: float
@@ -122,17 +135,23 @@ class PortfolioSnapshot(BaseModel):
 
 
 class BenchmarkPoint(BaseModel):
+    """Represent benchmark equity and return at one time point."""
+
     time: str
     equity: float
     return_pct: float
 
 
 class EquityPoint(BaseModel):
+    """Represent strategy equity at one time point."""
+
     time: str
     value: float
 
 
 class ExecutionMarker(BaseModel):
+    """Represent a simulated order execution marker."""
+
     time: str
     price: float
     nominal_price: float | None = None
@@ -142,6 +161,8 @@ class ExecutionMarker(BaseModel):
 
 
 class ActivePosition(BaseModel):
+    """Represent an open simulated position."""
+
     symbol: str
     entry_time: str
     entry_price: float
@@ -154,6 +175,8 @@ class ActivePosition(BaseModel):
 
 
 class TradeAnalytics(BaseModel):
+    """Represent aggregate statistics for completed trades."""
+
     win_rate_pct: float
     profit_factor: float
     payoff_ratio: float
@@ -166,6 +189,8 @@ class TradeAnalytics(BaseModel):
 
 
 class BenchmarkAnalytics(BaseModel):
+    """Represent benchmark-relative performance metrics."""
+
     benchmark_total_return_pct: float
     benchmark_cagr: float
     alpha: float
@@ -174,6 +199,8 @@ class BenchmarkAnalytics(BaseModel):
 
 
 class BacktestResponse(BaseModel):
+    """Represent a complete backtest result."""
+
     symbol: str
     initial_capital: float
     final_equity: float

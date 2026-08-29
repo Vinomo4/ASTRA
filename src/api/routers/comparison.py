@@ -1,4 +1,5 @@
-# src/api/routers/comparison.py
+"""Expose the strategy comparison API endpoint."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
@@ -11,9 +12,16 @@ router = APIRouter()
 
 @router.post("/compare", response_model=ComparisonResponse)
 async def run_strategy_comparison(req: ComparisonRequest) -> ComparisonResponse:
-    """
-    Executes a side-by-side comparative backtest between Strategy A and Strategy B
-    under identical data, timeframe, initial capital, and friction conditions.
+    """Compare two strategies under identical backtest conditions.
+
+    Args:
+        req: Market, execution, and strategy comparison settings.
+
+    Returns:
+        Metrics, attribution, and timeline data for both strategies.
+
+    Raises:
+        HTTPException: If the comparison inputs are invalid or execution fails.
     """
     engine = ComparatorEngine()
     try:

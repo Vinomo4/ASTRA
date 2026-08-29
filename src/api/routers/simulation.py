@@ -1,14 +1,13 @@
-# src/api/routers/simulation.py
+"""Provide backtesting, strategy comparison, preset, and OOS audit endpoints."""
+
 from __future__ import annotations
 
 import json
 import logging
-import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-import numpy as np
 import pandas as pd
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -45,9 +44,11 @@ PRESETS_FILE = Path("data/presets.json")
 
 
 # ==========================================
-# 1. Modelos Pydantic para Presets, OOS y Comparación
+# 1. Pydantic models for presets, OOS audits, and comparisons
 # ==========================================
 class PresetPayload(BaseModel):
+    """Represent a saved strategy preset payload."""
+
     preset_name: str
     strategy_id: str
     strategy_params: dict[str, Any] = Field(default_factory=dict)
@@ -63,12 +64,16 @@ class PresetPayload(BaseModel):
 
 
 class OOSAuditRequest(BaseModel):
+    """Represent a request to audit an out-of-sample equity split."""
+
     equity_curve: list[EquityPoint]
     trades: list[TradeItem]
     split_ratio: float = Field(default=0.30, ge=0.10, le=0.90)
 
 
 class OOSAuditResponse(BaseModel):
+    """Represent out-of-sample audit metrics and validation status."""
+
     split_date: str
     is_trades_count: int
     oos_trades_count: int
@@ -84,12 +89,16 @@ class OOSAuditResponse(BaseModel):
 
 
 class StrategyCompareSpec(BaseModel):
+    """Define one strategy included in a comparison."""
+
     strategy_id: str
     strategy_params: dict[str, Any] = Field(default_factory=dict)
     name: str = "Strategy"
 
 
 class CompareRequest(BaseModel):
+    """Represent a request to compare two strategies on the same market data."""
+
     symbol: str = Field(default="BTC-USD")
     start_date: str = Field(default="2022-01-01")
     end_date: str = Field(default="2025-12-31")
@@ -107,6 +116,8 @@ class CompareRequest(BaseModel):
 
 
 class StrategyCompareMetrics(BaseModel):
+    """Represent performance metrics for one compared strategy."""
+
     strategy_id: str
     strategy_name: str
     total_return_pct: float
@@ -123,7 +134,9 @@ class StrategyCompareMetrics(BaseModel):
 
 
 class AttributionSummary(BaseModel):
-    outperforming_strategy: str  # 'A' | 'B'
+    """Summarize the performance differences between two strategies."""
+
+    outperforming_strategy: str  # "A" or "B"
     delta_cagr: float
     delta_sharpe: float
     delta_alpha: float
@@ -133,6 +146,8 @@ class AttributionSummary(BaseModel):
 
 
 class TimelinePoint(BaseModel):
+    """Represent aligned strategy and benchmark equity at one time point."""
+
     time: str
     equity_a: float
     equity_b: float
@@ -140,6 +155,8 @@ class TimelinePoint(BaseModel):
 
 
 class ComparisonResponse(BaseModel):
+    """Represent the result of a two-strategy comparison."""
+
     symbol: str
     start_date: str
     end_date: str
@@ -150,7 +167,7 @@ class ComparisonResponse(BaseModel):
 
 
 # ==========================================
-# 2. Utilidades para Presets Locales
+# 2. Local preset utilities
 # ==========================================
 def _load_presets_from_disk() -> list[dict[str, Any]]:
     if not PRESETS_FILE.exists():
@@ -169,10 +186,15 @@ def _save_presets_to_disk(presets: list[dict[str, Any]]) -> None:
 
 
 # ==========================================
-# 3. Endpoints de Estrategias y Presets
+# 3. Strategy and preset endpoints
 # ==========================================
 @router.get("/strategies")
 async def get_strategies() -> dict[str, list[dict[str, Any]]]:
+    """List metadata for all registered strategies.
+
+    Returns:
+        Registered strategy metadata.
+    """
     metadata_list = []
     for strat_cls in StrategyRegistry._registry.values():
         if hasattr(strat_cls, "get_metadata"):
@@ -203,11 +225,24 @@ async def get_strategies() -> dict[str, list[dict[str, Any]]]:
 
 @router.get("/presets")
 async def get_presets() -> dict[str, list[dict[str, Any]]]:
+    """List saved strategy presets.
+
+    Returns:
+        Saved preset payloads.
+    """
     return {"presets": _load_presets_from_disk()}
 
 
 @router.post("/presets")
 async def save_preset(payload: PresetPayload) -> dict[str, str]:
+    """Create or replace a strategy preset.
+
+    Args:
+        payload: Preset values to persist.
+
+    Returns:
+        The persistence status and confirmation message.
+    """
     presets = _load_presets_from_disk()
     preset_data = payload.model_dump() if hasattr(payload, "model_dump") else payload.dict()
     preset_data["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -216,27 +251,35 @@ async def save_preset(payload: PresetPayload) -> dict[str, str]:
     presets.append(preset_data)
 
     _save_presets_to_disk(presets)
-    return {
-        "status": "success",
-        "message": f"Preset '{payload.preset_name}' guardado correctamente.",
-    }
+    return {"status": "success", "message": f"Preset '{payload.preset_name}' saved successfully."}
 
 
 @router.delete("/presets/{preset_name}")
 async def delete_preset(preset_name: str) -> dict[str, str]:
+    """Delete a saved strategy preset.
+
+    Args:
+        preset_name: Name of the preset to delete.
+
+    Returns:
+        The deletion status and confirmation message.
+
+    Raises:
+        HTTPException: If the requested preset does not exist.
+    """
     presets = _load_presets_from_disk()
     initial_len = len(presets)
     presets = [p for p in presets if p.get("preset_name") != preset_name]
 
     if len(presets) == initial_len:
-        raise HTTPException(status_code=404, detail=f"Preset '{preset_name}' no encontrado.")
+        raise HTTPException(status_code=404, detail=f"Preset '{preset_name}' not found.")
 
     _save_presets_to_disk(presets)
-    return {"status": "success", "message": f"Preset '{preset_name}' eliminado."}
+    return {"status": "success", "message": f"Preset '{preset_name}' deleted."}
 
 
 # ==========================================
-# 4. Ingesta de Mercado
+# 4. Market data ingestion
 # ==========================================
 def get_market_data(
     symbol: str,
@@ -246,6 +289,19 @@ def get_market_data(
     storage: StorageManager,
     loader: BaseDataLoader | None = None,
 ) -> pd.DataFrame:
+    """Load market data from cache, storage, or an external loader.
+
+    Args:
+        symbol: Market symbol to load.
+        start_date: Inclusive start date.
+        end_date: Inclusive end date.
+        timeframe: Candle timeframe.
+        storage: Persistent market data storage.
+        loader: Optional external data loader.
+
+    Returns:
+        Chronologically ordered OHLCV market data.
+    """
     cache_key = (symbol, start_date, end_date, timeframe)
     if cache_key in _DATA_CACHE:
         return _DATA_CACHE[cache_key].copy()
@@ -287,10 +343,21 @@ def get_market_data(
 
 
 # ==========================================
-# 5. Endpoint de Simulación Individual
+# 5. Single simulation endpoint
 # ==========================================
 @router.post("/run", response_model=BacktestResponse)
 async def run_backtest(req: BacktestRequest) -> BacktestResponse:
+    """Run one strategy backtest.
+
+    Args:
+        req: Backtest configuration and strategy parameters.
+
+    Returns:
+        Backtest metrics, analytics, trades, and chart data.
+
+    Raises:
+        HTTPException: If market data cannot be loaded or strategy parameters are invalid.
+    """
     storage = StorageManager()
     loader = _DEFAULT_LOADER
     timeframe = getattr(req, "timeframe", "4h") or "4h"
@@ -306,12 +373,12 @@ async def run_backtest(req: BacktestRequest) -> BacktestResponse:
         )
     except Exception as exc:
         raise HTTPException(
-            status_code=400, detail=f"Error cargando datos para {req.symbol} ({timeframe}): {exc}"
+            status_code=400, detail=f"Error loading data for {req.symbol} ({timeframe}): {exc}"
         ) from exc
 
     if df.empty:
         raise HTTPException(
-            status_code=400, detail=f"No hay datos para {req.symbol} en resolución {timeframe}"
+            status_code=400, detail=f"No data available for {req.symbol} at {timeframe} resolution"
         )
 
     strategy_params = dict(req.strategy_params)
@@ -320,7 +387,7 @@ async def run_backtest(req: BacktestRequest) -> BacktestResponse:
     except KeyError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=f"Parámetros inválidos: {exc}") from exc
+        raise HTTPException(status_code=422, detail=f"Invalid parameters: {exc}") from exc
 
     engine = BacktestEngine(
         strategy=strategy,
@@ -385,8 +452,17 @@ async def run_backtest(req: BacktestRequest) -> BacktestResponse:
     volumes = df["volume"].astype(float).tolist()
 
     ohlc_history = [
-        OHLCPoint(time=t, open=o, high=h, low=l, close=c, volume=v)
-        for t, o, h, l, c, v in zip(ts_strings, opens, highs, lows, closes, volumes)
+        OHLCPoint(
+            time=timestamp,
+            open=open_price,
+            high=high_price,
+            low=low_price,
+            close=close_price,
+            volume=volume,
+        )
+        for timestamp, open_price, high_price, low_price, close_price, volume in zip(
+            ts_strings, opens, highs, lows, closes, volumes
+        )
     ]
 
     bench_ts_strings = pd.to_datetime(sorted_df["timestamp"]).dt.strftime(time_fmt).tolist()
@@ -490,10 +566,21 @@ async def run_backtest(req: BacktestRequest) -> BacktestResponse:
 
 
 # ==========================================
-# 6. Endpoint de Comparación Multi-Estrategia (A vs B)
+# 6. Multi-strategy comparison endpoint (A vs B)
 # ==========================================
 @router.post("/compare", response_model=ComparisonResponse)
 async def compare_strategies(req: CompareRequest) -> ComparisonResponse:
+    """Compare two strategies under identical market and execution conditions.
+
+    Args:
+        req: Shared backtest settings and the two strategy specifications.
+
+    Returns:
+        Per-strategy metrics, attribution, and an aligned equity timeline.
+
+    Raises:
+        HTTPException: If market data is unavailable or a strategy is invalid.
+    """
     storage = StorageManager()
     loader = _DEFAULT_LOADER
     timeframe = getattr(req, "timeframe", "4h") or "4h"
@@ -509,7 +596,7 @@ async def compare_strategies(req: CompareRequest) -> ComparisonResponse:
 
     if df.empty:
         raise HTTPException(
-            status_code=400, detail=f"No hay datos para {req.symbol} en resolución {timeframe}"
+            status_code=400, detail=f"No data available for {req.symbol} at {timeframe} resolution"
         )
 
     # 1. Benchmark Buy & Hold
@@ -522,13 +609,13 @@ async def compare_strategies(req: CompareRequest) -> ComparisonResponse:
     bench_equity_series = sorted_df.set_index("timestamp")["close"] * benchmark_shares
     bench_ts_strings = pd.to_datetime(sorted_df["timestamp"]).dt.strftime(time_fmt).tolist()
 
-    # 2. Ejecutar Estrategia A
+    # 2. Run Strategy A
     try:
         strat_a_obj = StrategyRegistry.create(
             req.strategy_a.strategy_id, **req.strategy_a.strategy_params
         )
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Estrategia A inválida: {exc}") from exc
+        raise HTTPException(status_code=400, detail=f"Invalid Strategy A: {exc}") from exc
 
     engine_a = BacktestEngine(
         strategy=strat_a_obj,
@@ -563,13 +650,13 @@ async def compare_strategies(req: CompareRequest) -> ComparisonResponse:
         total_frictions=round(frictions_a, 2),
     )
 
-    # 3. Ejecutar Estrategia B
+    # 3. Run Strategy B
     try:
         strat_b_obj = StrategyRegistry.create(
             req.strategy_b.strategy_id, **req.strategy_b.strategy_params
         )
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Estrategia B inválida: {exc}") from exc
+        raise HTTPException(status_code=400, detail=f"Invalid Strategy B: {exc}") from exc
 
     engine_b = BacktestEngine(
         strategy=strat_b_obj,
@@ -604,7 +691,7 @@ async def compare_strategies(req: CompareRequest) -> ComparisonResponse:
         total_frictions=round(frictions_b, 2),
     )
 
-    # 4. Construir Timeline Comparativo Alineado
+    # 4. Build the aligned comparison timeline
     timeline: list[TimelinePoint] = []
     a_curve_map = {
         (ts.strftime(time_fmt) if isinstance(ts, (pd.Timestamp, datetime)) else str(ts)): float(val)
@@ -625,7 +712,7 @@ async def compare_strategies(req: CompareRequest) -> ComparisonResponse:
             )
         )
 
-    # 5. Calcular Atribución y Ganador
+    # 5. Calculate attribution and select the winner
     winner = "A" if metrics_a.sharpe_ratio >= metrics_b.sharpe_ratio else "B"
     attribution = AttributionSummary(
         outperforming_strategy=winner,
@@ -649,14 +736,24 @@ async def compare_strategies(req: CompareRequest) -> ComparisonResponse:
 
 
 # ==========================================
-# 7. Endpoint de Auditoría OOS
+# 7. OOS audit endpoint
 # ==========================================
 @router.post("/oos-audit", response_model=OOSAuditResponse)
 async def audit_oos_split(req: OOSAuditRequest) -> OOSAuditResponse:
+    """Audit the out-of-sample portion of an equity curve.
+
+    Args:
+        req: Equity curve, trades, and split ratio to audit.
+
+    Returns:
+        In-sample and out-of-sample metrics with a validation status.
+
+    Raises:
+        HTTPException: If the equity curve has fewer than ten points.
+    """
     if len(req.equity_curve) < 10:
         raise HTTPException(
-            status_code=400,
-            detail="Puntos de patrimonio insuficientes para calcular la partición OOS.",
+            status_code=400, detail="Insufficient equity points to calculate the OOS split."
         )
 
     split_idx = int(len(req.equity_curve) * req.split_ratio)

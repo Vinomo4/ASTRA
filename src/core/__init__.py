@@ -1,3 +1,5 @@
+"""Shared configuration, constants, events, and domain models."""
+
 from .config import Settings, settings
 from .constants import AssetClass, OrderSide, OrderStatus, OrderType, SignalType
 from .events import Event, FillEvent, MarketDataEvent, OrderEvent, SignalEvent

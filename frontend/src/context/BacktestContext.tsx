@@ -1,6 +1,6 @@
 // frontend/src/context/BacktestContext.tsx
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import axios from 'axios';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { BacktestParams, BacktestResult, StrategyMetadata, StrategyPreset } from '../types';
 
 export type WorkspaceTab = 'studio' | 'performance' | 'stress_testing' | 'validation' | 'comparison';
@@ -38,6 +38,40 @@ interface BacktestContextType {
 }
 
 const BacktestContext = createContext<BacktestContextType | null>(null);
+
+const getBacktestErrorMessage = (error: unknown): string => {
+  const genericMessage = 'No se pudo ejecutar la simulación del backtest.';
+  if (!axios.isAxiosError(error)) return genericMessage;
+
+  const detail = (error.response?.data as { detail?: unknown } | undefined)?.detail;
+  if (Array.isArray(detail)) {
+    const formatted = detail
+      .map((item: unknown) => {
+        const issue = item as { loc?: Array<string | number>; msg?: string };
+        const location = issue.loc?.filter((part) => part !== 'body').join('.') || 'Solicitud';
+        const message = issue.msg === 'Field required' ? 'Campo obligatorio' : 'Valor no válido';
+        return `${location}: ${message}`;
+      })
+      .join(' | ');
+    return formatted || genericMessage;
+  }
+  if (typeof detail === 'string' && detail.trim()) {
+    const statusCode = error.response?.status;
+    return statusCode
+      ? `${genericMessage} El servidor respondió con el código ${statusCode}.`
+      : genericMessage;
+  }
+  if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
+    return 'La solicitud de backtest superó el tiempo de espera.';
+  }
+  if (!error.response) {
+    return 'No se pudo conectar con el servidor del backtest.';
+  }
+  if (error.response.status) {
+    return `${genericMessage} El servidor respondió con el código ${error.response.status}.`;
+  }
+  return genericMessage;
+};
 
 const getCacheKey = (p: BacktestParams): string => {
   return [
@@ -143,18 +177,8 @@ export const BacktestProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         resultsCache.current.set(cacheKey, data);
         setResults(data);
         setLastRunParams(JSON.parse(JSON.stringify(activeParams)));
-      } catch (err: any) {
-        const detail = err.response?.data?.detail;
-        if (Array.isArray(detail)) {
-          const formatted = detail
-            .map((d: any) => `${d.loc?.filter((l: string) => l !== 'body').join('.') || 'Error'}: ${d.msg}`)
-            .join(' | ');
-          setError(formatted);
-        } else if (typeof detail === 'string') {
-          setError(detail);
-        } else {
-          setError(err.message || 'Backtest simulation failed');
-        }
+      } catch (err: unknown) {
+        setError(getBacktestErrorMessage(err));
       } finally {
         setLoading(false);
       }
@@ -243,6 +267,6 @@ export const BacktestProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
 export const useBacktest = () => {
   const ctx = useContext(BacktestContext);
-  if (!ctx) throw new Error('useBacktest must be used within a BacktestProvider');
+  if (!ctx) throw new Error('useBacktest debe usarse dentro de BacktestProvider');
   return ctx;
 };

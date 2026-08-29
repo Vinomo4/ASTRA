@@ -1,11 +1,7 @@
-"""plot_sharpe_ratio_timeframe_degradation_1d_vs_4h.py.
-
-Generates Figure 5.2: Paired bar chart illustrating Sharpe ratio contraction
-and relative variation caused by the timeframe shift from 1d to 4h across all
-evaluated strategies and asset classes.
-"""
+"""Plot Sharpe ratio changes from daily to four-hour timeframes."""
 
 from pathlib import Path
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -22,12 +18,7 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 plt.rcParams.update(
     {
         "font.family": "sans-serif",
-        "font.sans-serif": [
-            "DejaVu Sans",
-            "Arial",
-            "Helvetica",
-            "Liberation Sans",
-        ],
+        "font.sans-serif": ["DejaVu Sans", "Arial", "Helvetica", "Liberation Sans"],
         "font.size": 9.5,
         "axes.labelsize": 10.5,
         "axes.titlesize": 11.5,
@@ -45,62 +36,17 @@ plt.rcParams.update(
 # ---------------------------------------------------------
 data = [
     # SPY - Traditional Equities
-    {
-        "Activo": "SPY",
-        "Estrategia": "Reversión a\nla Media",
-        "1d": 1.42,
-        "4h": 1.35,
-    },
-    {
-        "Activo": "SPY",
-        "Estrategia": "Ruptura de\nVolatilidad",
-        "1d": 0.38,
-        "4h": -0.42,
-    },
-    {
-        "Activo": "SPY",
-        "Estrategia": "Inferencia ML\n(Triple Barrera)",
-        "1d": 0.61,
-        "4h": -0.78,
-    },
+    {"Asset": "SPY", "Strategy": "Mean\nReversion", "1d": 1.42, "4h": 1.35},
+    {"Asset": "SPY", "Strategy": "Volatility\nBreakout", "1d": 0.38, "4h": -0.42},
+    {"Asset": "SPY", "Strategy": "ML Inference\n(Triple-Barrier)", "1d": 0.61, "4h": -0.78},
     # BTC-USD - Cryptoassets
-    {
-        "Activo": "BTC-USD",
-        "Estrategia": "Reversión a\nla Media",
-        "1d": 0.12,
-        "4h": -0.65,
-    },
-    {
-        "Activo": "BTC-USD",
-        "Estrategia": "Ruptura de\nVolatilidad",
-        "1d": 1.18,
-        "4h": 0.94,
-    },
-    {
-        "Activo": "BTC-USD",
-        "Estrategia": "Inferencia ML\n(Triple Barrera)",
-        "1d": 0.85,
-        "4h": -0.31,
-    },
+    {"Asset": "BTC-USD", "Strategy": "Mean\nReversion", "1d": 0.12, "4h": -0.65},
+    {"Asset": "BTC-USD", "Strategy": "Volatility\nBreakout", "1d": 1.18, "4h": 0.94},
+    {"Asset": "BTC-USD", "Strategy": "ML Inference\n(Triple-Barrier)", "1d": 0.85, "4h": -0.31},
     # ETH-USD - Cryptoassets
-    {
-        "Activo": "ETH-USD",
-        "Estrategia": "Reversión a\nla Media",
-        "1d": 0.42,
-        "4h": -0.52,
-    },
-    {
-        "Activo": "ETH-USD",
-        "Estrategia": "Ruptura de\nVolatilidad",
-        "1d": 1.05,
-        "4h": 0.82,
-    },
-    {
-        "Activo": "ETH-USD",
-        "Estrategia": "Inferencia ML\n(Triple Barrera)",
-        "1d": 0.91,
-        "4h": 0.35,
-    },
+    {"Asset": "ETH-USD", "Strategy": "Mean\nReversion", "1d": 0.42, "4h": -0.52},
+    {"Asset": "ETH-USD", "Strategy": "Volatility\nBreakout", "1d": 1.05, "4h": 0.82},
+    {"Asset": "ETH-USD", "Strategy": "ML Inference\n(Triple-Barrier)", "1d": 0.91, "4h": 0.35},
 ]
 
 df = pd.DataFrame(data)
@@ -118,7 +64,7 @@ rects_1d = ax.bar(
     x - bar_width / 2,
     df["1d"],
     bar_width,
-    label="Escala Diaria (1d)",
+    label="Daily Timeframe (1d)",
     color="#1f77b4",
     edgecolor="#333333",
     linewidth=0.6,
@@ -129,7 +75,7 @@ rects_4h = ax.bar(
     x + bar_width / 2,
     df["4h"],
     bar_width,
-    label="Escala Intradiaria (4h)",
+    label="Intraday Timeframe (4h)",
     color="#d95f02",
     edgecolor="#333333",
     linewidth=0.6,
@@ -148,7 +94,7 @@ ax.axvline(5.5, color="#dcdcdc", linewidth=1.0, linestyle="--", zorder=1)
 ax.text(
     1.0,
     1.62,
-    "Renta Variable (SPY)",
+    "Equities (SPY)",
     ha="center",
     va="center",
     fontsize=10,
@@ -158,7 +104,7 @@ ax.text(
 ax.text(
     4.0,
     1.62,
-    "Criptoactivo (BTC-USD)",
+    "Cryptoasset (BTC-USD)",
     ha="center",
     va="center",
     fontsize=10,
@@ -168,7 +114,7 @@ ax.text(
 ax.text(
     7.0,
     1.62,
-    "Criptoactivo (ETH-USD)",
+    "Cryptoasset (ETH-USD)",
     ha="center",
     va="center",
     fontsize=10,
@@ -177,9 +123,9 @@ ax.text(
 )
 
 # Axis format and limits
-ax.set_ylabel("Ratio de Sharpe Anualizado", labelpad=8)
+ax.set_ylabel("Annualized Sharpe Ratio", labelpad=8)
 ax.set_xticks(x)
-ax.set_xticklabels(df["Estrategia"], rotation=0, ha="center")
+ax.set_xticklabels(df["Strategy"], rotation=0, ha="center")
 ax.set_ylim(-1.15, 1.85)
 
 # Value annotations over/under bars
@@ -200,7 +146,7 @@ for rect in list(rects_1d) + list(rects_4h):
 
 # Title & Legend layout
 fig.suptitle(
-    "Sensibilidad Temporal del Ratio de Sharpe: Escala Diaria (1d) frente a Intradiaria (4h)",
+    "Sharpe Ratio Timeframe Sensitivity: Daily (1d) versus Intraday (4h)",
     fontsize=11.5,
     fontweight="bold",
     y=0.98,

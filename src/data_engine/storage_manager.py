@@ -1,4 +1,5 @@
-# src/data_engine/storage_manager.py
+"""Persist market data and strategy presets in DuckDB."""
+
 from __future__ import annotations
 
 import json
@@ -10,7 +11,17 @@ import pandas as pd
 
 
 class StorageManager:
+    """Manage persistent OHLCV data and strategy presets."""
+
     def __init__(self, db_path: str = "data/market_database.duckdb") -> None:
+        """Initialize the storage database and its tables.
+
+        Args:
+            db_path: Path to the DuckDB database file.
+
+        Raises:
+            duckdb.Error: If the database or required tables cannot be initialized.
+        """
         self.db_path = db_path
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
         self._init_db()
@@ -67,6 +78,15 @@ class StorageManager:
                 pass
 
     def save_ohlcv(self, df: pd.DataFrame, timeframe: str = "1d") -> None:
+        """Store OHLCV rows, replacing records with matching primary keys.
+
+        Args:
+            df: OHLCV rows to persist.
+            timeframe: Candle interval assigned when the input has no timeframe column.
+
+        Raises:
+            duckdb.Error: If the rows cannot be written to the database.
+        """
         if df.empty:
             return
         data = df.copy()
@@ -86,12 +106,23 @@ class StorageManager:
             )
 
     def load_ohlcv(
-        self,
-        symbol: str,
-        start_date: str,
-        end_date: str,
-        timeframe: str = "1d",
+        self, symbol: str, start_date: str, end_date: str, timeframe: str = "1d"
     ) -> pd.DataFrame:
+        """Load stored OHLCV rows for a symbol and date range.
+
+        Args:
+            symbol: Exact market symbol stored in the database.
+            start_date: Inclusive range start accepted by pandas.
+            end_date: Inclusive range end accepted by pandas.
+            timeframe: Exact stored candle interval.
+
+        Returns:
+            Matching OHLCV rows ordered by timestamp.
+
+        Raises:
+            ValueError: If either date cannot be parsed.
+            duckdb.Error: If the database query fails.
+        """
         start_ts = pd.to_datetime(start_date, utc=True).tz_localize(None)
         end_ts = pd.to_datetime(end_date, utc=True).tz_localize(None)
 
@@ -130,6 +161,29 @@ class StorageManager:
         gap_slippage_enabled: bool = True,
         description: str = "",
     ) -> dict[str, Any]:
+        """Store a named strategy and execution preset.
+
+        Args:
+            preset_name: Unique name used to identify the preset.
+            strategy_id: Identifier of the configured strategy.
+            strategy_params: Strategy-specific parameter values.
+            risk_fraction: Fraction of equity risked per trade.
+            atr_multiplier_sl: ATR multiplier used for stop loss placement.
+            atr_multiplier_tp: ATR multiplier used for take profit placement.
+            timeframe: Candle interval configured for the strategy.
+            commission_bps: Variable commission in basis points.
+            commission_fixed: Fixed commission charged per order.
+            slippage_bps: Simulated slippage in basis points.
+            gap_slippage_enabled: Whether gap slippage is enabled.
+            description: Optional human-readable preset description.
+
+        Returns:
+            The stored preset represented as a dictionary.
+
+        Raises:
+            TypeError: If the strategy parameters are not JSON serializable.
+            duckdb.Error: If the preset cannot be written or read back.
+        """
         params_json = json.dumps(strategy_params)
         with duckdb.connect(self.db_path) as conn:
             conn.execute(
@@ -159,6 +213,18 @@ class StorageManager:
         return self.get_strategy_preset(preset_name)
 
     def get_strategy_preset(self, preset_name: str) -> dict[str, Any] | None:
+        """Retrieve a strategy preset by name.
+
+        Args:
+            preset_name: Unique preset name to retrieve.
+
+        Returns:
+            The stored preset, or ``None`` when the name does not exist.
+
+        Raises:
+            json.JSONDecodeError: If stored strategy parameters contain invalid JSON.
+            duckdb.Error: If the database query fails.
+        """
         with duckdb.connect(self.db_path) as conn:
             rel = conn.execute(
                 """
@@ -192,6 +258,15 @@ class StorageManager:
         }
 
     def list_strategy_presets(self) -> list[dict[str, Any]]:
+        """List strategy presets from most to least recently updated.
+
+        Returns:
+            Stored presets represented as dictionaries.
+
+        Raises:
+            json.JSONDecodeError: If stored strategy parameters contain invalid JSON.
+            duckdb.Error: If the database query fails.
+        """
         with duckdb.connect(self.db_path) as conn:
             rows = conn.execute(
                 """
@@ -224,6 +299,17 @@ class StorageManager:
         ]
 
     def delete_strategy_preset(self, preset_name: str) -> bool:
+        """Delete a strategy preset by name.
+
+        Args:
+            preset_name: Unique preset name to delete.
+
+        Returns:
+            ``True`` when the delete statement completes.
+
+        Raises:
+            duckdb.Error: If the database statement fails.
+        """
         with duckdb.connect(self.db_path) as conn:
             res = conn.execute("DELETE FROM strategy_presets WHERE preset_name = ?", [preset_name])
             return res.fetchall() is not None

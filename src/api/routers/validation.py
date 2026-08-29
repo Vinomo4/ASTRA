@@ -1,4 +1,5 @@
-# src/api/routers/validation.py
+"""Expose the rolling walk-forward validation endpoint."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
@@ -11,9 +12,19 @@ router = APIRouter()
 
 @router.post("/walk-forward", response_model=WalkForwardResponse)
 async def run_walk_forward_validation(req: WalkForwardRequest) -> WalkForwardResponse:
-    """
-    Executes an Expanding Rolling Walk-Forward multi-window validation
-    and computes the Walk-Forward Efficiency Ratio (WFER).
+    """Run expanding rolling walk-forward validation.
+
+    The validation computes results across multiple windows and derives the
+    walk-forward efficiency ratio.
+
+    Args:
+        req: Market, strategy, window, risk, and execution settings.
+
+    Returns:
+        Aggregated validation metrics and out-of-sample equity data.
+
+    Raises:
+        HTTPException: If validation inputs are invalid or execution fails.
     """
     engine = WalkForwardEngine()
     try:

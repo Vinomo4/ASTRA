@@ -1,4 +1,5 @@
-# src/api/routers/strategies.py
+"""Expose strategy discovery and preset management endpoints."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
@@ -17,14 +18,22 @@ router = APIRouter()
 
 @router.get("/strategies", response_model=StrategyListResponse)
 async def list_available_strategies() -> StrategyListResponse:
-    """Returns metadata and parameter schemas for all registered strategies."""
+    """List metadata and parameter schemas for registered strategies.
+
+    Returns:
+        Metadata for every registered strategy.
+    """
     strategies = StrategyRegistry.list_strategies()
     return StrategyListResponse(strategies=[s.model_dump() for s in strategies])
 
 
 @router.get("/presets", response_model=StrategyPresetListResponse)
 async def list_strategy_presets() -> StrategyPresetListResponse:
-    """Returns all saved user strategy configuration presets."""
+    """List saved strategy configuration presets.
+
+    Returns:
+        All persisted strategy presets.
+    """
     storage = StorageManager()
     presets = storage.list_strategy_presets()
     return StrategyPresetListResponse(presets=[StrategyPresetResponse(**p) for p in presets])
@@ -32,7 +41,17 @@ async def list_strategy_presets() -> StrategyPresetListResponse:
 
 @router.post("/presets", response_model=StrategyPresetResponse)
 async def save_strategy_preset(req: StrategyPresetCreate) -> StrategyPresetResponse:
-    """Creates or updates a persistent named strategy parameter profile."""
+    """Create or update a named strategy preset.
+
+    Args:
+        req: Strategy and execution settings to persist.
+
+    Returns:
+        The persisted strategy preset.
+
+    Raises:
+        HTTPException: If the requested strategy is not registered.
+    """
     if req.strategy_id not in StrategyRegistry._registry:
         raise HTTPException(
             status_code=400,
@@ -58,7 +77,17 @@ async def save_strategy_preset(req: StrategyPresetCreate) -> StrategyPresetRespo
 
 @router.delete("/presets/{preset_name}")
 async def delete_strategy_preset(preset_name: str) -> dict[str, str]:
-    """Deletes a saved strategy preset."""
+    """Delete a saved strategy preset.
+
+    Args:
+        preset_name: Name of the preset to delete.
+
+    Returns:
+        A confirmation message.
+
+    Raises:
+        HTTPException: If the requested preset does not exist.
+    """
     storage = StorageManager()
     existing = storage.get_strategy_preset(preset_name)
     if not existing:

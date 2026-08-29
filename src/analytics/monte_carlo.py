@@ -1,4 +1,5 @@
-# src/analytics/monte_carlo.py
+"""Bootstrap simulation of realized trade outcomes."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -11,6 +12,24 @@ from src.core.models import TradeRecord
 
 @dataclass
 class MonteCarloOutput:
+    """Store aggregate risk estimates and simulated equity confidence bands.
+
+    Attributes:
+        num_simulations: Number of bootstrap paths evaluated.
+        trade_count: Number of trades sampled per path.
+        median_max_dd_pct: Median maximum path drawdown percentage.
+        p90_max_dd_pct: 90th percentile maximum drawdown percentage.
+        p95_max_dd_pct: 95th percentile maximum drawdown percentage.
+        p99_max_dd_pct: 99th percentile maximum drawdown percentage.
+        risk_of_ruin_pct: Percentage of paths that reach the ruin threshold.
+        ruin_threshold_pct: Drawdown percentage defining ruin.
+        var_95_pct: Fifth percentile of realized trade returns.
+        cvar_95_pct: Mean realized return at or below the 95% VaR threshold.
+        var_99_pct: First percentile of realized trade returns.
+        cvar_99_pct: Mean realized return at or below the 99% VaR threshold.
+        confidence_bands: Equity percentiles for each simulated trade step.
+    """
+
     num_simulations: int
     trade_count: int
     median_max_dd_pct: float
@@ -27,21 +46,36 @@ class MonteCarloOutput:
 
 
 class MonteCarloSimulator:
+    """Bootstrap realized trades to estimate equity-path risk."""
+
     def __init__(
         self,
         num_simulations: int = 1_000,
         ruin_threshold_pct: float = 30.0,
         random_seed: int | None = 42,
     ) -> None:
+        """Initialize the bootstrap simulator.
+
+        Args:
+            num_simulations: Number of equity paths to generate.
+            ruin_threshold_pct: Drawdown percentage used to identify ruin.
+            random_seed: Seed for NumPy's random number generator, or ``None``
+                for nondeterministic sampling.
+        """
         self.num_simulations = num_simulations
         self.ruin_threshold_pct = ruin_threshold_pct
         self.rng = np.random.default_rng(random_seed)
 
-    def run(
-        self,
-        trades: list[TradeRecord],
-        initial_capital: float,
-    ) -> MonteCarloOutput:
+    def run(self, trades: list[TradeRecord], initial_capital: float) -> MonteCarloOutput:
+        """Run bootstrap simulations over realized trade outcomes.
+
+        Args:
+            trades: Completed trades supplying net PnL and percentage returns.
+            initial_capital: Equity value at the start of each simulated path.
+
+        Returns:
+            Aggregate drawdown, ruin, tail-risk, and confidence-band results.
+        """
         n_trades = len(trades)
         if n_trades < 3:
             return self._empty_output(initial_capital, n_trades)

@@ -1,11 +1,15 @@
-# src/api/schemas/walk_forward.py
+"""Define rolling walk-forward validation request and response schemas."""
+
 from __future__ import annotations
 
 from typing import Any
+
 from pydantic import BaseModel, Field
 
 
 class WalkForwardRequest(BaseModel):
+    """Represent market, strategy, window, risk, and execution settings."""
+
     symbol: str
     start_date: str
     end_date: str
@@ -14,16 +18,10 @@ class WalkForwardRequest(BaseModel):
     strategy_id: str = "regime_volatility_breakout"
     strategy_params: dict[str, Any] = Field(default_factory=dict)
     train_duration_months: int = Field(
-        default=12,
-        ge=1,
-        le=60,
-        description="Initial calibration / training window in months",
+        default=12, ge=1, le=60, description="Initial calibration / training window in months"
     )
     test_step_months: int = Field(
-        default=1,
-        ge=1,
-        le=12,
-        description="Out-of-sample forward step window in months",
+        default=1, ge=1, le=12, description="Out-of-sample forward step window in months"
     )
     risk_fraction: float = Field(default=0.01, ge=0.001, le=0.2)
     atr_multiplier_sl: float = Field(default=2.0, ge=0.5, le=10.0)
@@ -35,12 +33,16 @@ class WalkForwardRequest(BaseModel):
 
 
 class OOSEquityPoint(BaseModel):
+    """Represent out-of-sample equity at one time point."""
+
     time: str
     value: float
 
 
-# Modelos de compatibilidad para routers y serializaciones previas
+# Compatibility models for routers and existing serialized payloads
 class ValidationMetricsBlock(BaseModel):
+    """Represent aggregate metrics for a validation segment."""
+
     total_return_pct: float = 0.0
     cagr: float = 0.0
     sharpe_ratio: float = 0.0
@@ -52,6 +54,8 @@ class ValidationMetricsBlock(BaseModel):
 
 
 class ValidationTimelinePoint(BaseModel):
+    """Represent aligned in-sample and out-of-sample equity values."""
+
     time: str
     equity_is: float | None = None
     equity_oos: float | None = None
@@ -59,6 +63,8 @@ class ValidationTimelinePoint(BaseModel):
 
 
 class WalkForwardResponse(BaseModel):
+    """Represent aggregate rolling walk-forward validation results."""
+
     symbol: str
     strategy_id: str
     timeframe: str = "1d"

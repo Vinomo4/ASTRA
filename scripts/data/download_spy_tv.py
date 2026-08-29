@@ -1,24 +1,21 @@
-# scripts/data/download_spy_tv.py
-from pathlib import Path
+"""Download SPY four-hour bars from TradingView into a local CSV file."""
+
 import warnings
+from pathlib import Path
+
 import pandas as pd
 
 # 1. Suppress non-fatal Python 3.12 regex warnings from tvDatafeed
 warnings.filterwarnings("ignore", category=SyntaxWarning, module="tvDatafeed")
 
-from tvDatafeed import Interval, TvDatafeed
+from tvDatafeed import Interval, TvDatafeed  # noqa: E402
 
 # 2. Initialize TvDatafeed (Optionally add free TradingView credentials to bypass the 2500-bar cap)
 # tv = TvDatafeed(username="your_username", password="your_password")
 tv = TvDatafeed()
 
 print("Downloading SPY 4h bars from TradingView (AMEX)...")
-df = tv.get_hist(
-    symbol="SPY",
-    exchange="AMEX",
-    interval=Interval.in_4_hour,
-    n_bars=3500,
-)
+df = tv.get_hist(symbol="SPY", exchange="AMEX", interval=Interval.in_4_hour, n_bars=3500)
 
 if df is not None and not df.empty:
     df = df.reset_index()

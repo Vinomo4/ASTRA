@@ -1,5 +1,12 @@
 // frontend/src/components/views/PerformanceAuditView.tsx
-import { AlertCircle, BarChart, BarChart2, RefreshCw, TrendingUp, ZoomIn } from 'lucide-react';
+import {
+    AlertCircle,
+    BarChart,
+    BarChart2,
+    RefreshCw,
+    TrendingUp,
+    ZoomIn,
+} from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Area,
@@ -19,8 +26,12 @@ import {
 } from 'recharts';
 
 import { useBacktest } from '../../context/BacktestContext';
-import type { ExecutionMarker, UnifiedDataPoint } from '../../types';
+import type {
+    ExecutionMarker,
+    UnifiedDataPoint,
+} from '../../types';
 import {
+    formatAdaptiveDate,
     formatAdaptivePrice,
     formatAxisDate,
     formatAxisPrice,
@@ -29,24 +40,24 @@ import {
     formatPercent,
 } from '../../utils/formatters';
 import { ActivePositionBanner } from '../ActivePositionBanner';
+import { CandlestickShape } from '../charts/CandlestickShape';
+import { ExecutionMarkerShape } from '../charts/ExecutionMarkerShape';
+import { FastTooltipBridge } from '../charts/FastTooltipBridge';
 import { KPIGrid } from '../KPIGrid';
 import { SynchronizedInspector } from '../SynchronizedInspector';
 import { TradeAnalyticsPanel } from '../TradeAnalyticsPanel';
 import { TradeAuditTable } from '../TradeAuditTable';
-import { CandlestickShape } from '../charts/CandlestickShape';
-import { ExecutionMarkerShape } from '../charts/ExecutionMarkerShape';
-import { FastTooltipBridge } from '../charts/FastTooltipBridge';
 
 const TIMEFRAME_OPTIONS = [
-  { label: '4H', value: '4h' },
-  { label: '1D', value: '1d' },
+  { label: '4 h', value: '4h' },
+  { label: '1 d', value: '1d' },
 ];
 
 const ZOOM_OPTIONS = [
-  { label: '50 Bars', count: 50 },
-  { label: '100 Bars', count: 100 },
-  { label: '250 Bars', count: 250 },
-  { label: 'All Bars', count: 0 },
+  { label: '50 velas', count: 50 },
+  { label: '100 velas', count: 100 },
+  { label: '250 velas', count: 250 },
+  { label: 'Todas', count: 0 },
 ];
 
 const MAX_RENDERED_BARS = 600;
@@ -149,16 +160,24 @@ export const PerformanceAuditView: React.FC = () => {
     if (!data) return;
 
     if (badgeRef.current) {
-      badgeRef.current.textContent = isHover ? '● LIVE HOVER' : 'LATEST BAR';
+      badgeRef.current.textContent = isHover ? '● INSPECCIÓN ACTIVA' : 'ÚLTIMA VELA';
       badgeRef.current.className = isHover ? 'text-emerald-400 font-semibold mr-1.5' : 'text-slate-500 mr-1.5';
     }
-    if (dateRef.current) dateRef.current.textContent = data.time;
+    if (dateRef.current) {
+      dateRef.current.textContent = formatAdaptiveDate(data.time, isIntraday);
+    }
     if (equityRef.current) equityRef.current.textContent = formatAdaptivePrice(data.equity);
     if (cashRef.current) cashRef.current.textContent = formatAdaptivePrice(data.cash);
-    if (unitsRef.current) unitsRef.current.textContent = data.position_quantity.toString();
+    if (unitsRef.current) {
+      unitsRef.current.textContent = data.position_quantity.toLocaleString('es-ES', {
+        maximumFractionDigits: 20,
+      });
+    }
     if (avgPriceRef.current) {
       avgPriceRef.current.textContent =
-        data.position_avg_price > 0 ? formatAdaptivePrice(data.position_avg_price) : '—';
+        data.position_avg_price > 0
+          ? formatAdaptivePrice(data.position_avg_price)
+          : '—';
     }
 
     if (pnlRef.current) {
@@ -175,7 +194,7 @@ export const PerformanceAuditView: React.FC = () => {
         data.drawdown_pct < 0 ? 'text-rose-400' : 'text-slate-400'
       }`;
     }
-  }, []);
+  }, [isIntraday]);
 
   const updateInspectorDOM = useCallback(
     (data: UnifiedDataPoint, isHover: boolean) => {
@@ -247,14 +266,17 @@ export const PerformanceAuditView: React.FC = () => {
     return (
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-12 text-center text-slate-400">
         <AlertCircle size={36} className="mx-auto mb-3 text-slate-500" />
-        <p className="font-semibold text-slate-200">No Simulation Data Generated</p>
-        <p className="text-xs text-slate-500 mt-1 mb-4">Execute a backtest run in the Strategy Studio to audit performance.</p>
+        <p className="font-semibold text-slate-200">No se han generado datos de simulación</p>
+        <p className="text-xs text-slate-500 mt-1 mb-4">
+          Ejecuta una simulación retrospectiva desde el Registro de estrategias para auditar el
+          rendimiento.
+        </p>
         <button
           type="button"
           onClick={() => setActiveTab('studio')}
           className="text-xs font-semibold px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition"
         >
-          Open Strategy Studio
+          Abrir Registro de estrategias
         </button>
       </div>
     );
@@ -262,7 +284,9 @@ export const PerformanceAuditView: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {results.active_position && <ActivePositionBanner position={results.active_position} />}
+      {results.active_position && (
+        <ActivePositionBanner position={results.active_position} />
+      )}
       <KPIGrid results={results} />
       <TradeAnalyticsPanel analytics={results.trade_analytics} trades={results.trades} />
 
@@ -274,10 +298,12 @@ export const PerformanceAuditView: React.FC = () => {
               <BarChart2 size={20} className="text-emerald-400" />
               <div>
                 <h2 className="text-base font-semibold text-white">
-                  Price Action & Executions ({results.symbol})
+                  Evolución del precio y ejecuciones ({results.symbol})
                 </h2>
                 <span className="text-xs text-slate-500">
-                  {params.start_date} to {params.end_date} • {params.timeframe || '4h'} • {fullTimeline.length} Total Bars
+                  Del {formatAdaptiveDate(params.start_date, false)} al{' '}
+                  {formatAdaptiveDate(params.end_date, false)} • {params.timeframe || '4h'} •{' '}
+                  {fullTimeline.length.toLocaleString('es-ES')} velas en total
                 </span>
               </div>
             </div>
@@ -311,7 +337,7 @@ export const PerformanceAuditView: React.FC = () => {
                       : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
                   }`}
                 >
-                  Candlesticks
+                  Velas
                 </button>
                 <button
                   type="button"
@@ -322,7 +348,7 @@ export const PerformanceAuditView: React.FC = () => {
                       : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
                   }`}
                 >
-                  Line
+                  Línea
                 </button>
               </div>
 
@@ -335,28 +361,28 @@ export const PerformanceAuditView: React.FC = () => {
                     : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200'
                 }`}
               >
-                <BarChart size={13} /> Volume
+                <BarChart size={13} /> Volumen
               </button>
 
               {loading && (
                 <span className="flex items-center gap-1.5 text-xs text-amber-400 bg-amber-400/10 px-2.5 py-1 rounded-lg border border-amber-400/20">
-                  <RefreshCw size={12} className="animate-spin" /> Live Fetching...
+                  <RefreshCw size={12} className="animate-spin" /> Cargando datos...
                 </span>
               )}
             </div>
 
             <div className="flex flex-wrap items-center gap-4 text-xs font-semibold">
               <span className="flex items-center gap-1.5 text-emerald-400">
-                <span className="inline-block w-0 h-0 border-x-[5px] border-x-transparent border-b-[9px] border-b-emerald-400"></span> Buy
+                <span className="inline-block w-0 h-0 border-x-[5px] border-x-transparent border-b-[9px] border-b-emerald-400"></span> Compra
               </span>
               <span className="flex items-center gap-1.5 text-emerald-300">
-                <span className="inline-block w-2.5 h-2.5 bg-emerald-400 rotate-45"></span> TP
+                <span className="inline-block w-2.5 h-2.5 bg-emerald-400 rotate-45"></span> Take Profit
               </span>
               <span className="flex items-center gap-1.5 text-rose-400">
-                <span className="inline-block w-0 h-0 border-x-[5px] border-x-transparent border-t-[9px] border-t-rose-500"></span> SL
+                <span className="inline-block w-0 h-0 border-x-[5px] border-x-transparent border-t-[9px] border-t-rose-500"></span> Stop Loss
               </span>
               <span className="flex items-center gap-1.5 text-indigo-400">
-                <span className="inline-block w-2.5 h-2.5 bg-indigo-400 rounded-sm"></span> Exit
+                <span className="inline-block w-2.5 h-2.5 bg-indigo-400 rounded-sm"></span> Salida
               </span>
             </div>
           </div>
@@ -427,7 +453,7 @@ export const PerformanceAuditView: React.FC = () => {
                     strokeDasharray="4 4"
                     strokeWidth={1.5}
                     label={{
-                      value: `SL: ${formatAdaptivePrice(results.active_position.stop_loss)}`,
+                      value: `Stop Loss: ${formatAdaptivePrice(results.active_position.stop_loss)}`,
                       fill: '#f43f5e',
                       position: 'left',
                       fontSize: 10,
@@ -443,7 +469,7 @@ export const PerformanceAuditView: React.FC = () => {
                     strokeDasharray="4 4"
                     strokeWidth={1.5}
                     label={{
-                      value: `TP: ${formatAdaptivePrice(results.active_position.take_profit)}`,
+                      value: `Take Profit: ${formatAdaptivePrice(results.active_position.take_profit)}`,
                       fill: '#10b981',
                       position: 'left',
                       fontSize: 10,
@@ -468,7 +494,7 @@ export const PerformanceAuditView: React.FC = () => {
           {showVolume && (
             <div className="h-28 w-full pt-2 border-t border-slate-800/60 mt-2">
               <div className="text-[11px] font-semibold text-slate-400 mb-1 flex items-center gap-1.5">
-                <BarChart size={12} className="text-slate-500" /> Trading Volume
+                <BarChart size={12} className="text-slate-500" /> Volumen negociado
               </div>
               <ResponsiveContainer width="100%" height="80%" debounce={50}>
                 <RechartsBarChart syncId="portfolioSync" data={chartTimeline}>
@@ -517,12 +543,20 @@ export const PerformanceAuditView: React.FC = () => {
           {/* Bottom Footer: Zoom Window Selector */}
           <div className="flex items-center justify-between pt-3 mt-3 border-t border-slate-800/70 text-xs text-slate-400">
             <span className="text-[11px] text-slate-500">
-              Showing <span className="text-slate-300 font-medium">{visibleTimeline.length}</span> of <span className="text-slate-300 font-medium">{fullTimeline.length}</span> bars
+              Mostrando{' '}
+              <span className="text-slate-300 font-medium">
+                {visibleTimeline.length.toLocaleString('es-ES')}
+              </span>{' '}
+              de{' '}
+              <span className="text-slate-300 font-medium">
+                {fullTimeline.length.toLocaleString('es-ES')}
+              </span>{' '}
+              velas
             </span>
 
             <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-lg border border-slate-800">
               <span className="text-[11px] text-slate-500 px-1.5 flex items-center gap-1">
-                <ZoomIn size={12} /> Range:
+                <ZoomIn size={12} /> Rango:
               </span>
               {ZOOM_OPTIONS.map((z) => (
                 <button
@@ -546,11 +580,11 @@ export const PerformanceAuditView: React.FC = () => {
         <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl mb-6 shadow-xl">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
             <h2 className="text-base font-semibold text-white flex items-center gap-2">
-              <TrendingUp size={18} className="text-emerald-400" /> Strategy Equity vs. Buy & Hold Benchmark
+              <TrendingUp size={18} className="text-emerald-400" /> Capital de la estrategia frente a la referencia Buy & Hold
             </h2>
             <div className="flex items-center gap-5 text-xs font-semibold">
               <span className="flex items-center gap-1.5 text-emerald-400">
-                <span className="inline-block w-3 h-0.5 bg-emerald-400"></span> Strategy Equity
+                <span className="inline-block w-3 h-0.5 bg-emerald-400"></span> Capital de la estrategia
               </span>
               <span className="flex items-center gap-1.5 text-slate-400">
                 <span className="inline-block w-3 h-0.5 border-t border-dashed border-slate-400"></span> {results.symbol} Buy & Hold

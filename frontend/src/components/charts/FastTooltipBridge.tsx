@@ -2,11 +2,11 @@
 import { memo, useEffect } from 'react';
 import type { UnifiedDataPoint } from '../../types';
 import {
-  formatAdaptivePrice,
-  formatCompactCurrency,
-  formatCompactVolume,
-  formatPercent,
-  formatAdaptiveDate,
+    formatAdaptiveDate,
+    formatAdaptivePrice,
+    formatCompactCurrency,
+    formatCompactVolume,
+    formatPercent,
 } from '../../utils/formatters';
 
 interface FastTooltipBridgeProps {
@@ -78,7 +78,7 @@ export const FastTooltipBridge = memo(
 
             {data.volume !== undefined && data.volume > 0 && (
               <div className="flex justify-between text-[11px] text-slate-400 border-t border-slate-800/80 pt-1">
-                <span>Volume:</span>
+                <span>Volumen:</span>
                 <span className="font-medium text-slate-200">{formatCompactVolume(data.volume)}</span>
               </div>
             )}
@@ -87,7 +87,7 @@ export const FastTooltipBridge = memo(
           /* Portfolio Equity Metrics */
           <div className="space-y-1 text-[11px]">
             <div className="flex justify-between gap-3">
-              <span className="text-slate-400">Strategy Equity:</span>
+              <span className="text-slate-400">Patrimonio de la estrategia:</span>
               <span className="text-emerald-400 font-bold">
                 {formatAdaptivePrice(data.equity)}
               </span>

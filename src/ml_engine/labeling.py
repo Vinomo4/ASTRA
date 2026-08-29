@@ -1,43 +1,38 @@
-# src/ml_engine/labeling.py
+"""Event sampling and triple-barrier labeling utilities."""
+
 from __future__ import annotations
 
 import numpy as np
 import pandas as pd
 
 
-def get_daily_volatility(
-    close: pd.Series,
-    span: int = 20,
-) -> pd.Series:
-    """
-    Computes an exponentially weighted moving standard deviation of log returns.
+def get_daily_volatility(close: pd.Series, span: int = 20) -> pd.Series:
+    """Compute exponentially weighted volatility from log returns.
 
     Args:
-        close: Series of price bars indexed by DatetimeIndex.
-        span: EWM span period for volatility estimation.
+        close: Price series indexed by timestamps.
+        span: Exponentially weighted moving-window span.
 
     Returns:
-        Series of bar-to-bar volatility thresholds.
+        Bar-to-bar volatility estimates aligned with ``close``.
     """
     returns = np.log(close / close.shift(1))
     vol = returns.ewm(span=span).std()
     return vol.bfill().ffill()
 
 
-def cusum_filter(
-    close: pd.Series,
-    threshold: float | pd.Series,
-) -> pd.DatetimeIndex:
-    """
-    Symmetric CUSUM Filter for sampling events when cumulative
-    log price divergence exceeds a dynamic volatility threshold.
+def cusum_filter(close: pd.Series, threshold: float | pd.Series) -> pd.DatetimeIndex:
+    """Sample events with a symmetric cumulative sum filter.
+
+    An event is emitted when cumulative log-price divergence exceeds the
+    corresponding fixed or dynamic volatility threshold.
 
     Args:
-        close: Series of close prices indexed by DatetimeIndex.
-        threshold: Constant float or rolling Series representing the filter threshold.
+        close: Close-price series indexed by timestamps.
+        threshold: Fixed threshold or timestamp-aligned threshold series.
 
     Returns:
-        pd.DatetimeIndex of timestamps triggering a sampling event.
+        Timestamps that trigger sampling events.
     """
     events: list[pd.Timestamp] = []
     s_pos = 0.0
@@ -62,20 +57,17 @@ def cusum_filter(
 
 
 def add_vertical_barriers(
-    event_timestamps: pd.DatetimeIndex,
-    close: pd.Series,
-    num_bars: int = 10,
+    event_timestamps: pd.DatetimeIndex, close: pd.Series, num_bars: int = 10
 ) -> pd.Series:
-    """
-    Computes vertical time-barrier timestamps (holding period expiration) for each event.
+    """Compute holding-period expiration timestamps for sampled events.
 
     Args:
-        event_timestamps: DatetimeIndex of sampled event start times.
-        close: Series of price bars to align indexing.
-        num_bars: Fixed number of forward bars before holding window expires.
+        event_timestamps: Sampled event start times.
+        close: Price series whose index defines the available bars.
+        num_bars: Number of forward bars in each holding window.
 
     Returns:
-        Series mapping each event timestamp to its forward barrier expiration timestamp.
+        Event timestamps mapped to their vertical-barrier timestamps.
     """
     close_idx = close.index
     barriers: dict[pd.Timestamp, pd.Timestamp] = {}
@@ -97,29 +89,25 @@ def triple_barrier_labeling(
     vertical_barrier: pd.Series | None = None,
     min_ret: float = 0.0005,
 ) -> pd.DataFrame:
-    """
-    Applies the Triple-Barrier Method to determine whether price touches
-    the Upper Barrier (Take-Profit), Lower Barrier (Stop-Loss), or Vertical Barrier first.
+    """Label events according to the first barrier touched.
+
+    Each event is evaluated against an upper take-profit barrier, a lower
+    stop-loss barrier, and an optional vertical time barrier.
 
     Args:
-        close: Price series indexed by DatetimeIndex.
-        events: Timestamps of trade entry decisions.
-        pt_sl: Non-negative 2-element list [pt_multiplier, sl_multiplier].
-        target: Dynamic scale factor per event (e.g. daily volatility).
-        vertical_barrier: Series mapping event timestamps to expiration timestamps.
-        min_ret: Minimum required return to assign a non-zero directional label.
+        close: Price series indexed by timestamps.
+        events: Trade-entry decision timestamps.
+        pt_sl: Take-profit and stop-loss multipliers, in that order.
+        target: Dynamic barrier scale for each event.
+        vertical_barrier: Optional event-to-expiration timestamp mapping.
+        min_ret: Minimum absolute return for a nonzero vertical-barrier label.
 
     Returns:
-        pd.DataFrame containing:
-            - 't1': Timestamp of first touched barrier.
-            - 'ret': Realized fractional return at barrier touch.
-            - 'bin': Categorical label (1, -1, or 0).
+        A data frame indexed by event with ``t1`` first-touch timestamps,
+        ``ret`` realized fractional returns, and ``bin`` labels in
+        ``{-1, 0, 1}``.
     """
-    out = pd.DataFrame(
-        index=events,
-        columns=["t1", "ret", "bin"],
-        dtype=object,
-    )
+    out = pd.DataFrame(index=events, columns=["t1", "ret", "bin"], dtype=object)
 
     pt_mult, sl_mult = pt_sl[0], pt_sl[1]
 

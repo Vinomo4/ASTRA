@@ -1,4 +1,5 @@
-# src/ml_engine/train.py
+"""Feature engineering and model-training orchestration."""
+
 from __future__ import annotations
 
 import os
@@ -57,6 +58,18 @@ class FeatureEngineeringPipeline:
 
     @staticmethod
     def build_features(df: pd.DataFrame) -> pd.DataFrame:
+        """Build stationary features from OHLCV bars.
+
+        Args:
+            df: Market bars containing ``close``, ``high``, ``low``, and
+                ``volume`` columns.
+
+        Returns:
+            Complete feature rows indexed like ``df``.
+
+        Raises:
+            KeyError: If a required OHLCV column is missing.
+        """
         features = pd.DataFrame(index=df.index)
 
         close = df["close"]
@@ -85,10 +98,7 @@ class FeatureEngineeringPipeline:
 
         # 4. Normalized True Range / Volatility
         prev_close = close.shift(1)
-        tr = np.maximum(
-            high - low,
-            np.maximum(np.abs(high - prev_close), np.abs(low - prev_close)),
-        )
+        tr = np.maximum(high - low, np.maximum(np.abs(high - prev_close), np.abs(low - prev_close)))
         features["natr_14"] = (tr.rolling(14).mean() / close) * 100.0
 
         # 5. Bollinger Bands %B and Bandwidth
@@ -110,11 +120,25 @@ class ModelTrainer:
     """Orchestrates end-to-end dataset creation, model optimization, and training."""
 
     def __init__(self, config: TrainingConfig) -> None:
+        """Initialize the trainer with its training configuration.
+
+        Args:
+            config: Model, labeling, validation, and artifact settings.
+        """
         self.config = config
 
     def prepare_dataset(self, df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series, pd.Series]:
-        """
-        Extracts features and applies CUSUM volatility filtering + Triple-Barrier labeling.
+        """Create a feature matrix and binary triple-barrier targets.
+
+        Args:
+            df: OHLCV market bars, optionally with a ``timestamp`` column.
+
+        Returns:
+            Feature rows, binary long-profit labels, and event end times.
+
+        Raises:
+            KeyError: If a required market-data column is missing.
+            ValueError: If CUSUM sampling produces no feature-aligned events.
         """
         df_norm = df.copy()
         if "timestamp" in df_norm.columns and not isinstance(df_norm.index, pd.DatetimeIndex):
@@ -159,7 +183,19 @@ class ModelTrainer:
         return X, y_binary, t1
 
     def train(self, df: pd.DataFrame) -> TrainingResult:
-        """Trains and validates model, saving serialized pipeline artifacts."""
+        """Train and validate a model, then save its artifact.
+
+        Args:
+            df: OHLCV market bars used to build the training dataset.
+
+        Returns:
+            The estimator, feature schema, metrics, parameters, and artifact path.
+
+        Raises:
+            KeyError: If a required market-data column is missing.
+            ValueError: If dataset preparation or estimator fitting cannot
+                produce a valid training set.
+        """
         X, y, t1 = self.prepare_dataset(df)
 
         best_params: dict[str, Any] = {
@@ -182,11 +218,7 @@ class ModelTrainer:
             best_params.update(opt_res.best_params)
 
         # Cross-validation score estimation
-        cv = PurgedKFold(
-            n_splits=self.config.n_splits,
-            t1=t1,
-            pct_embargo=self.config.pct_embargo,
-        )
+        cv = PurgedKFold(n_splits=self.config.n_splits, t1=t1, pct_embargo=self.config.pct_embargo)
 
         oof_preds = np.zeros(len(y))
         oof_probs = np.zeros(len(y))
@@ -198,7 +230,7 @@ class ModelTrainer:
             y_train_fold = y.iloc[train_idx]
             y_val_fold = y.iloc[val_idx]
 
-            # Salvaguarda: comprobar que existan ambas clases en entrenamiento y validación
+            # Ensure both training and validation folds contain both classes.
             if len(np.unique(y_train_fold)) < 2 or len(np.unique(y_val_fold)) < 2:
                 continue
 

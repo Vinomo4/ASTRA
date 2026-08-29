@@ -1,4 +1,5 @@
-# src/strategies/mean_reversion.py
+"""Statistical mean-reversion strategy with momentum and regime filters."""
+
 from __future__ import annotations
 
 from collections import deque
@@ -14,6 +15,8 @@ from src.strategies.registry import StrategyRegistry
 
 @StrategyRegistry.register
 class MeanReversionStrategy(BaseStrategy):
+    """Trade oversold deviations in non-trending market regimes."""
+
     id = "statistical_mean_reversion"
     name = "Statistical Z-Score Mean Reversion"
     description = (
@@ -23,6 +26,11 @@ class MeanReversionStrategy(BaseStrategy):
     category = "Rule-Based"
 
     def __init__(self, **params: Any) -> None:
+        """Initialize indicator thresholds, position state, and bar history.
+
+        Args:
+            **params: Strategy parameter overrides.
+        """
         super().__init__(**params)
         self.lookback_period = int(self.get_param("lookback_period", 20))
         self.z_entry_threshold = float(self.get_param("z_entry_threshold", -2.0))
@@ -40,6 +48,11 @@ class MeanReversionStrategy(BaseStrategy):
 
     @classmethod
     def get_metadata(cls) -> StrategyMetadata:
+        """Return the mean-reversion strategy metadata.
+
+        Returns:
+            Strategy identity and configurable indicator thresholds.
+        """
         return StrategyMetadata(
             id=cls.id,
             name=cls.name,
@@ -181,6 +194,14 @@ class MeanReversionStrategy(BaseStrategy):
         return adx, atr
 
     def on_bar(self, event: MarketDataEvent) -> SignalEvent | None:
+        """Evaluate mean-reversion entry and exit conditions for one bar.
+
+        Args:
+            event: Completed market bar to append and evaluate.
+
+        Returns:
+            A long or exit signal when its conditions hold; otherwise ``None``.
+        """
         self._history.append(event)
         min_bars = max(self.lookback_period, self.adx_period + 2, self.rsi_period + 2)
         if len(self._history) < min_bars:

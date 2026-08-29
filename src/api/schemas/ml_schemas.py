@@ -1,4 +1,5 @@
-# src/api/schemas/ml_schemas.py
+"""Define machine-learning training and model discovery schemas."""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -20,8 +21,7 @@ class MLTrainRequest(BaseModel):
         description="End timestamp for training dataset slice.",
     )
     target_metric: str = Field(
-        default="neg_log_loss",
-        description="Optimization objective ('neg_log_loss' or 'roc_auc').",
+        default="neg_log_loss", description="Optimization objective ('neg_log_loss' or 'roc_auc')."
     )
     pt_multiplier: float = Field(
         default=1.5, ge=0.1, le=10.0, description="Take-Profit barrier multiplier."

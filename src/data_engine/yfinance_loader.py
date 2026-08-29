@@ -1,4 +1,5 @@
-# src/data_engine/yfinance_loader.py
+"""Load standardized OHLCV data from Yahoo Finance."""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
@@ -10,13 +11,25 @@ from src.data_engine.base_loader import BaseDataLoader
 
 
 class YFinanceLoader(BaseDataLoader):
+    """Load OHLCV candles through the Yahoo Finance client."""
+
     def fetch_ohlcv(
-        self,
-        symbol: str,
-        start: datetime | str,
-        end: datetime | str,
-        timeframe: str = "1d",
+        self, symbol: str, start: datetime | str, end: datetime | str, timeframe: str = "1d"
     ) -> pd.DataFrame:
+        """Fetch and standardize Yahoo Finance OHLCV candles.
+
+        Args:
+            symbol: Yahoo Finance ticker symbol.
+            start: Requested start timestamp.
+            end: Requested end timestamp.
+            timeframe: Requested candle interval.
+
+        Returns:
+            Standardized OHLCV rows for the requested market.
+
+        Raises:
+            ValueError: If timestamps are invalid or Yahoo Finance returns no data.
+        """
         now = datetime.now(UTC)
 
         # 1. Parse start and end into timezone-aware UTC timestamps
@@ -75,13 +88,7 @@ class YFinanceLoader(BaseDataLoader):
                 df.set_index("timestamp")
                 .resample("4h")
                 .agg(
-                    {
-                        "open": "first",
-                        "high": "max",
-                        "low": "min",
-                        "close": "last",
-                        "volume": "sum",
-                    }
+                    {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}
                 )
                 .dropna()
                 .reset_index()

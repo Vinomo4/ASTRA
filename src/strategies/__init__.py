@@ -1,4 +1,5 @@
-# src/strategies/__init__.py
+"""Trading strategy interfaces, implementations, and registry exports."""
+
 from src.strategies.base_strategy import BaseStrategy, ParameterDefinition, StrategyMetadata
 from src.strategies.custom_rule_strategy import CustomRuleStrategy
 from src.strategies.mean_reversion import MeanReversionStrategy

@@ -7,6 +7,13 @@ import { AssetPickerModal } from './AssetPickerModal';
 
 type DurationOption = '1Y' | '2Y' | '3Y' | '5Y' | 'custom';
 
+const DURATION_OPTIONS: { value: Exclude<DurationOption, 'custom'>; years: number; label: string }[] = [
+  { value: '1Y', years: 1, label: '1 año' },
+  { value: '2Y', years: 2, label: '2 años' },
+  { value: '3Y', years: 3, label: '3 años' },
+  { value: '5Y', years: 5, label: '5 años' },
+];
+
 const getActiveDuration = (startDate: string, endDate: string): DurationOption => {
   const end = new Date(`${endDate}T00:00:00Z`);
   if (Number.isNaN(end.getTime())) return 'custom';
@@ -28,8 +35,8 @@ export const GlobalControlRibbon: React.FC = () => {
   const currentAsset = ASSET_CATALOG.find((a) => a.symbol === params.symbol) || {
     symbol: params.symbol,
     name: params.symbol,
-    category: 'Market Asset',
-    exchange: 'Exchange',
+    category: 'Activo de mercado',
+    exchange: 'Mercado',
   };
 
   const isDateStale =
@@ -99,12 +106,11 @@ export const GlobalControlRibbon: React.FC = () => {
           <div className="flex flex-wrap items-center gap-3">
             {/* Quick Duration Chips */}
             <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
-              {(['1Y', '2Y', '3Y', '5Y'] as const).map((label) => {
-                const years = parseInt(label.replace('Y', ''), 10);
-                const isActive = activeDuration === label;
+              {DURATION_OPTIONS.map(({ value, years, label }) => {
+                const isActive = activeDuration === value;
                 return (
                   <button
-                    key={label}
+                    key={value}
                     type="button"
                     onClick={() => handleQuickDuration(years)}
                     className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition ${
@@ -132,6 +138,7 @@ export const GlobalControlRibbon: React.FC = () => {
               <Calendar size={14} className={isDateStale ? 'text-amber-400' : 'text-indigo-400'} />
               <input
                 type="date"
+                aria-label="Fecha de inicio"
                 value={params.start_date}
                 onChange={(e) => handleDateChange('start_date', e.target.value)}
                 className="bg-transparent focus:outline-none font-mono text-xs cursor-pointer text-white"
@@ -139,16 +146,17 @@ export const GlobalControlRibbon: React.FC = () => {
               <span className={isDateStale ? 'text-amber-500' : 'text-slate-500'}>→</span>
               <input
                 type="date"
+                aria-label="Fecha de fin"
                 value={params.end_date}
                 onChange={(e) => handleDateChange('end_date', e.target.value)}
                 className="bg-transparent focus:outline-none font-mono text-xs cursor-pointer text-white"
               />
               {isDateStale && (
                 <span
-                  title="Date window changed - click Run Backtest to apply"
+                  title="El intervalo de fechas ha cambiado; haz clic en Ejecutar backtest para aplicarlo"
                   className="text-[10px] text-amber-400 font-bold bg-amber-950 border border-amber-800 px-1.5 py-0.5 rounded ml-1 flex items-center gap-1 font-mono"
                 >
-                  <AlertCircle size={10} /> Pending
+                  <AlertCircle size={10} /> Pendiente
                 </span>
               )}
             </div>
@@ -165,7 +173,7 @@ export const GlobalControlRibbon: React.FC = () => {
               }`}
             >
               <Play size={14} className={isDirty ? 'fill-slate-950' : ''} />
-              {loading ? 'Simulating...' : isDirty ? 'Run to Update' : 'Run Backtest'}
+              {loading ? 'Simulando...' : isDirty ? 'Ejecutar para actualizar' : 'Ejecutar backtest'}
             </button>
           </div>
         </div>

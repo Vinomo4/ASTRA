@@ -1,4 +1,5 @@
-# scripts/verify_ml_pipeline.py
+"""Verify the ML training and event-driven inference pipeline end to end."""
+
 from datetime import UTC
 
 import numpy as np
@@ -39,11 +40,7 @@ storage.save_ohlcv(df)
 print("[2/3] Training ML Model...")
 trainer = ModelTrainer(
     TrainingConfig(
-        symbol="BTC-USD",
-        holding_period=10,
-        volatility_span=20,
-        n_splits=3,
-        model_dir="models",
+        symbol="BTC-USD", holding_period=10, volatility_span=20, n_splits=3, model_dir="models"
     )
 )
 result = trainer.train(df)
@@ -55,10 +52,7 @@ print(f"      Label Counts:   {result.labels_distribution}")
 # 4. Stream bars into MLInferenceStrategy to verify event-driven execution
 print("[3/3] Feeding live bar stream into MLInferenceStrategy...")
 strategy = MLInferenceStrategy(
-    model_path=result.model_path,
-    threshold_long=0.52,
-    threshold_exit=0.48,
-    lookback_window=40,
+    model_path=result.model_path, threshold_long=0.52, threshold_exit=0.48, lookback_window=40
 )
 
 generated_signals = []

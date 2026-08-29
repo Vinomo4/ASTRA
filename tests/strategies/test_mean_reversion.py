@@ -1,9 +1,6 @@
 # tests/strategies/test_mean_reversion.py
 from datetime import UTC, datetime, timedelta
 
-import numpy as np
-import pytest
-
 from src.core.constants import SignalType
 from src.core.events import MarketDataEvent
 from src.strategies.mean_reversion import MeanReversionStrategy

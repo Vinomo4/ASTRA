@@ -1,11 +1,11 @@
-# src/strategies/ml_strategy.py
+"""Event-driven inference strategy backed by serialized ML artifacts."""
+
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
 
 import joblib
-import numpy as np
 import pandas as pd
 from sklearn.base import BaseEstimator
 
@@ -18,9 +18,10 @@ from src.strategies.registry import StrategyRegistry
 
 @StrategyRegistry.register
 class MLInferenceStrategy(BaseStrategy):
-    """
-    Event-driven machine learning strategy that executes directional inferences
-    from trained scikit-learn / gradient boosting model artifacts.
+    """Generate directional signals from trained model artifacts.
+
+    The strategy builds the training feature schema from buffered market bars
+    and applies probability thresholds to enter or exit a long position.
     """
 
     id = "ml_inference"
@@ -38,6 +39,17 @@ class MLInferenceStrategy(BaseStrategy):
         feature_names: list[str] | None = None,
         **kwargs: Any,
     ) -> None:
+        """Initialize model settings, feature schema, and position state.
+
+        Args:
+            model_path: Default path to a serialized model artifact.
+            threshold_long: Minimum positive-class probability for entry.
+            threshold_exit: Maximum positive-class probability for exit.
+            lookback_window: Minimum buffered bars required for inference.
+            model: Optional preloaded estimator.
+            feature_names: Optional ordered model feature schema.
+            **kwargs: Additional base-strategy parameter overrides.
+        """
         super().__init__(**kwargs)
         self.model_path = model_path
         self.threshold_long = float(threshold_long)
@@ -49,12 +61,12 @@ class MLInferenceStrategy(BaseStrategy):
         self._history: list[dict[str, Any]] = []
         self._current_position: int = 0
 
-        # Intentar cargar artefacto inicial si existe
+        # Load the initial artifact when it exists.
         if self.model is None and Path(self.model_path).exists():
             self._load_artifact(self.model_path)
 
     def _resolve_model_path_for_symbol(self, symbol: str) -> str:
-        """Determina la ruta del modelo basándose en el símbolo recibido."""
+        """Resolve the preferred model path for a market symbol."""
         clean_sym = symbol.replace("/", "_").replace("-", "_")
         candidate_4h = Path(f"models/{clean_sym}_4h_model.joblib")
         candidate_1d = Path(f"models/{clean_sym}_1d_model.joblib")
@@ -69,7 +81,7 @@ class MLInferenceStrategy(BaseStrategy):
         return self.model_path
 
     def _load_artifact(self, path: str) -> bool:
-        """Carga el modelo serializado y el esquema de variables desde disco."""
+        """Load a serialized estimator and its feature schema from disk."""
         if not Path(path).exists():
             return False
         try:
@@ -87,6 +99,11 @@ class MLInferenceStrategy(BaseStrategy):
 
     @classmethod
     def get_metadata(cls) -> StrategyMetadata:
+        """Return the ML inference strategy metadata.
+
+        Returns:
+            Strategy identity and configurable artifact and threshold settings.
+        """
         return StrategyMetadata(
             id=cls.id,
             name=cls.name,
@@ -134,6 +151,15 @@ class MLInferenceStrategy(BaseStrategy):
         )
 
     def on_bar(self, event: MarketDataEvent) -> SignalEvent | None:
+        """Buffer a market bar and run model inference when ready.
+
+        Args:
+            event: Completed market bar to append and evaluate.
+
+        Returns:
+            A threshold-driven long or exit signal, or ``None`` when warming
+            up, unavailable, incompatible, or between thresholds.
+        """
         self._history.append(
             {
                 "timestamp": event.timestamp,
@@ -145,20 +171,20 @@ class MLInferenceStrategy(BaseStrategy):
             }
         )
 
-        # Limitar tamaño del buffer en memoria
+        # Limit the in-memory buffer size.
         if len(self._history) > (self.lookback_window + 30):
             self._history.pop(0)
 
         if len(self._history) < self.lookback_window:
             return None
 
-        # Carga dinámica si el modelo no está en memoria
+        # Load the model dynamically when it is not in memory.
         if self.model is None:
             resolved_path = self._resolve_model_path_for_symbol(event.symbol)
             if not self._load_artifact(resolved_path):
                 return None
 
-        # Construcción de características sobre el búfer activo
+        # Build features from the active buffer.
         df = pd.DataFrame(self._history)
         features = FeatureEngineeringPipeline.build_features(df)
 
@@ -172,10 +198,10 @@ class MLInferenceStrategy(BaseStrategy):
                 return None
             current_vector = current_vector[self.feature_names]
 
-        # Inferencia rápida
+        # Run inference for the latest feature row.
         prob_long = float(self.model.predict_proba(current_vector)[0, 1])
 
-        # Generación de señales según umbral de convicción
+        # Generate signals according to the confidence thresholds.
         if prob_long >= self.threshold_long and self._current_position == 0:
             self._current_position = 1
             return SignalEvent(

@@ -1,22 +1,22 @@
 // frontend/src/components/layout/TopNavigation.tsx
+import { Activity, Cpu, GitCompare, ShieldAlert, Sliders } from 'lucide-react';
 import React from 'react';
-import { Sliders, Activity, ShieldAlert, Cpu, GitCompare } from 'lucide-react';
 import { useBacktest, type WorkspaceTab } from '../../context/BacktestContext';
 
 export const TopNavigation: React.FC = () => {
   const { activeTab, setActiveTab, results } = useBacktest();
 
   const tabs: { id: WorkspaceTab; label: string; icon: React.ReactNode; badge?: string }[] = [
-    { id: 'studio', label: 'Strategy Studio', icon: <Sliders size={15} /> },
+    { id: 'studio', label: 'Registro de estrategias', icon: <Sliders size={15} /> },
     {
       id: 'performance',
-      label: 'Performance Audit',
+      label: 'Auditoría de rendimiento',
       icon: <Activity size={15} />,
       badge: results ? `${results.total_return_pct >= 0 ? '+' : ''}${results.total_return_pct.toFixed(1)}%` : undefined,
     },
-    { id: 'stress_testing', label: 'Stress Testing & MC', icon: <ShieldAlert size={15} /> },
-    { id: 'validation', label: 'Walk-Forward & OOS', icon: <Cpu size={15} /> },
-    { id: 'comparison', label: 'Model Benchmark', icon: <GitCompare size={15} /> },
+    { id: 'stress_testing', label: 'Pruebas de estrés y MC', icon: <ShieldAlert size={15} /> },
+    { id: 'validation', label: 'Walk-Forward y OOS', icon: <Cpu size={15} /> },
+    { id: 'comparison', label: 'Benchmark de modelos', icon: <GitCompare size={15} /> },
   ];
 
   return (
@@ -27,7 +27,7 @@ export const TopNavigation: React.FC = () => {
           <div className="flex items-center">
             <img
               src="/astra-logo-full.png"
-              alt="ASTRA Platform"
+              alt="Plataforma ASTRA"
               className="h-11 w-auto object-contain"
             />
           </div>

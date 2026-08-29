@@ -1,17 +1,23 @@
-# src/api/schemas/comparison.py
+"""Define strategy comparison request and response schemas."""
+
 from __future__ import annotations
 
 from typing import Any
+
 from pydantic import BaseModel, Field
 
 
 class ComparisonModelConfig(BaseModel):
+    """Define one strategy included in a comparison request."""
+
     strategy_id: str
     strategy_params: dict[str, Any] = Field(default_factory=dict)
     name: str = "Strategy"
 
 
 class ComparisonRequest(BaseModel):
+    """Represent settings for a two-strategy backtest comparison."""
+
     symbol: str
     start_date: str
     end_date: str
@@ -29,6 +35,8 @@ class ComparisonRequest(BaseModel):
 
 
 class StrategyComparisonMetrics(BaseModel):
+    """Represent performance metrics for one compared strategy."""
+
     strategy_name: str
     total_return_pct: float
     cagr: float
@@ -44,6 +52,8 @@ class StrategyComparisonMetrics(BaseModel):
 
 
 class AlphaAttributionDelta(BaseModel):
+    """Represent metric differences and the outperforming strategy."""
+
     delta_return_pct: float
     delta_cagr: float
     delta_sharpe: float
@@ -54,6 +64,8 @@ class AlphaAttributionDelta(BaseModel):
 
 
 class ComparisonTimelinePoint(BaseModel):
+    """Represent aligned strategy and benchmark equity values."""
+
     time: str
     equity_a: float
     equity_b: float
@@ -61,6 +73,8 @@ class ComparisonTimelinePoint(BaseModel):
 
 
 class ComparisonResponse(BaseModel):
+    """Represent the complete result of a strategy comparison."""
+
     symbol: str
     start_date: str
     end_date: str

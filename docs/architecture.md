@@ -8,4 +8,4 @@ This project uses an event-driven trading pipeline:
 4. Filter or enrich them with ML.
 5. Size and protect positions through the risk engine.
 6. Simulate fills in the execution engine.
-7. Aggregate portfolio metrics and show them in Streamlit.
+7. Expose portfolio metrics through FastAPI and render them in the Vite web frontend.

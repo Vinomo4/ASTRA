@@ -1,4 +1,5 @@
-# src/ml_engine/cross_validation.py
+"""Cross-validation utilities for time-dependent financial observations."""
+
 from __future__ import annotations
 
 from collections.abc import Iterator
@@ -8,20 +9,28 @@ import pandas as pd
 
 
 class PurgedKFold:
-    """
-    Purged and Embargoed K-Fold Cross Validation.
+    """Generate purged and embargoed K-fold splits.
 
-    Prevents lookahead leakage by:
-    1. Purging training observations whose evaluation window [t_0, t_1] overlaps with the test set.
-    2. Embargoing training observations immediately following the test set by an embargo percentage.
+    The splitter limits lookahead leakage by removing training observations
+    whose evaluation windows overlap the test set and embargoing observations
+    immediately after each test fold.
     """
 
     def __init__(
-        self,
-        n_splits: int = 5,
-        t1: pd.Series | None = None,
-        pct_embargo: float = 0.01,
+        self, n_splits: int = 5, t1: pd.Series | None = None, pct_embargo: float = 0.01
     ) -> None:
+        """Initialize the cross-validation splitter.
+
+        Args:
+            n_splits: Number of folds. Must be at least two.
+            t1: Event end times indexed by event start time. If omitted, only
+                the post-test embargo is applied.
+            pct_embargo: Non-negative fraction of observations to embargo
+                after each test fold.
+
+        Raises:
+            ValueError: If ``n_splits`` is less than two.
+        """
         if n_splits < 2:
             raise ValueError(f"n_splits must be at least 2, got {n_splits}")
         self.n_splits = n_splits
@@ -34,8 +43,15 @@ class PurgedKFold:
         y: pd.Series | np.ndarray | None = None,
         groups: np.ndarray | None = None,
     ) -> Iterator[tuple[np.ndarray, np.ndarray]]:
-        """
-        Generates purged and embargoed train/test integer index splits.
+        """Generate purged and embargoed train/test index splits.
+
+        Args:
+            X: Feature observations to split.
+            y: Optional targets accepted for estimator API compatibility.
+            groups: Optional groups accepted for estimator API compatibility.
+
+        Yields:
+            Pairs of training and test integer-index arrays.
         """
         _ = (y, groups)
         num_samples = len(X)
