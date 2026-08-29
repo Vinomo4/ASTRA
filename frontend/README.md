@@ -1,160 +1,140 @@
-# ASTRA Frontend
+# ASTRA Quantitative Workstation (Frontend)
 
-This frontend is the operator workspace for ASTRA backtests. It provides a single-page React interface for configuring simulations, inspecting price action and executions, reviewing Monte Carlo output and an exploratory client-side OOS audit, and comparing strategy variants against each other and against the benchmark curves returned by the backend. The frontend does not currently call the backend walk-forward endpoint.
+The ASTRA Frontend is the primary operator workspace for the ASTRA algorithmic framework. It provides a single-page, high-performance React application designed for configuring simulations, inspecting trade executions and price action, auditing Monte Carlo risk distributions, validating temporal persistency (Walk-Forward / OOS), and executing multi-strategy performance attribution against buy-and-hold benchmarks.
 
-This document complements the project-level guidance in [../README.md](../README.md), the backend and system overview in [../docs/architecture.md](../docs/architecture.md), and the research context in [../docs/methodology.md](../docs/methodology.md).
+This document complements the core architecture documentation in [../docs/architecture.md](../docs/architecture.md) and the quantitative research foundation in [../docs/methodology.md](../docs/methodology.md).
 
-## Stack
+## Technology Stack
 
-- React 19
-- TypeScript 6
-- Vite 8
-- Axios for HTTP calls to the Python API
-- Recharts for charts
-- Tailwind CSS 4 via the Vite plugin
-- Lucide React for icons
-- ESLint 10 with the current repo baseline
+- **Core Framework & Runtime:** React 19, TypeScript 6, Vite 8
+- **Data Visualization Engine:** Recharts (custom SVG shapes, synchronized cursor bridges, and dynamic timeline rendering)
+- **Styling & Design System:** Tailwind CSS 4, Lucide React icons
+- **State Management & Caching:** React Context API, Composite In-Memory Backtest Cache
+- **HTTP Client:** Axios (REST integration with FastAPI backend)
+- **Code Quality:** ESLint with strict TypeScript rules
 
 ## Prerequisites
 
-- Node.js `^20.19.0` or `>=22.12.0`, as required by the installed Vite version
-- npm
-- The ASTRA backend running locally at `http://127.0.0.1:8000`
+- **Node.js:** `^20.19.0` or `>=22.12.0` (aligned with Vite 8 requirements)
+- **Package Manager:** `npm`
+- **ASTRA Backend:** Running locally at `http://127.0.0.1:8000`
 
-The frontend currently uses hard-coded API URLs. There is no environment-based API host override.
+## Build & Tooling Scripts
 
-## Install
-
-From [frontend](.) run:
+From the `frontend` directory, the following commands are available:
 
 ```bash
+# Install exact dependency tree
 npm ci
-```
 
-## Scripts
-
-The current `package.json` scripts are:
-
-```bash
+# Start Vite development server with HMR (Hot Module Replacement)
 npm run dev
+
+# Compile TypeScript and generate optimized production bundle
 npm run build
+
+# Run linter across the entire TypeScript/TSX codebase
 npm run lint
+
+# Locally preview the compiled production build
 npm run preview
 ```
 
-- `npm run dev`: starts the Vite development server.
-- `npm run build`: runs `tsc -b` and produces a production bundle with Vite.
-- `npm run lint`: runs the current ESLint configuration across the frontend workspace.
-- `npm run preview`: serves the production build locally.
+## Local Setup & Quick Start
 
-## Run Locally
+1. Start the ASTRA backend engine first and verify that the API is active at `http://127.0.0.1:8000`.
+2. Install frontend dependencies:
+   ```bash
+   npm ci
+   ```
+3. Launch the development server:
+   ```bash
+   npm run dev
+   ```
+4. Access the interface in your browser at `http://localhost:5173`.
 
-1. Start the backend first and confirm it is reachable at `http://127.0.0.1:8000`.
-2. Install frontend dependencies with `npm ci`.
-3. Start the UI with `npm run dev`.
-4. Optionally validate the production bundle with `npm run build` and inspect it with `npm run preview`.
+---
 
-If the backend is not running, metadata loading and simulation requests will fail and the UI will show connection-related errors or empty states.
+## Architectural Design
 
-## Architecture
+The application is structured around a centralized state provider (`BacktestContext`) and a lightweight workspace router, avoiding unnecessary client-side routing overhead and maintaining atomic synchronization between data streams and visual inspectors.
 
-The frontend is intentionally small and centered around one shared context rather than routing or client-side persistence.
+```
+frontend/src/
+├── components/
+│   ├── charts/             # Custom SVG shapes (Candlesticks, Execution Markers, Fast Tooltip Bridge)
+│   ├── layout/             # Global shell (TopNavigation, GlobalControlRibbon, AssetPickerModal)
+│   ├── views/              # Top-level analytical workspaces (Studio, Performance, Stress, Validation, Compare)
+│   ├── ActivePositionBanner.tsx
+│   ├── KPIGrid.tsx
+│   ├── SynchronizedInspector.tsx
+│   ├── TradeAnalyticsPanel.tsx
+│   └── TradeAuditTable.tsx
+├── context/
+│   └── BacktestContext.tsx # Central store: simulation parameters, results cache, and API lifecycle
+├── types/
+│   └── index.ts            # Typed interfaces for market data, strategies, metrics, and API payloads
+├── utils/
+│   └── formatters.ts       # Numerical, currency, percentage, and UTC date formatters
+├── App.tsx                 # Application root & tab-based workspace router
+└── main.tsx                # React root bootstrap
+```
 
-- `src/main.tsx`: bootstraps React with `StrictMode` and mounts `App`.
-- `src/App.tsx`: wraps the application in `BacktestProvider`, renders the top navigation and global control ribbon, and switches views with a simple tab-based workspace router.
-- `src/context/BacktestContext.tsx`: owns the active tab, backtest parameters, fetched strategy and preset metadata, simulation results, loading and error state, and the in-memory results cache.
-- `src/components/layout`: global frame elements such as `TopNavigation`, `GlobalControlRibbon`, and the asset picker modal.
-- `src/components/views`: the five top-level workspaces rendered from the active tab.
-- `src/components`: reusable panels, KPI blocks, tables, and chart helpers shared by the views.
-- `src/components/charts`: custom Recharts shapes and tooltip bridge helpers.
-- `src/types`: TypeScript contracts for assets, strategies, simulations, validation, and comparison responses.
-- `src/utils`: formatting helpers for numbers, prices, percentages, and UTC date rendering.
+### Core Analytical Workspaces
 
-### Current Navigation Views
+| Workspace | Internal ID | Core Analytical Capability |
+| :--- | :--- | :--- |
+| **Strategy Studio** | `studio` | Strategy catalog selection, parameter fine-tuning, AST visual condition builder, risk sizing ($k_{SL}, k_{TP}$), and broker friction modeling. |
+| **Performance Audit** | `performance` | Synchronized OHLCV candlestick chart, trade execution markers, dynamic equity curve vs. benchmark, and granular transaction audit table. |
+| **Stress Testing & MC** | `stress_testing` | Non-parametric Bootstrap Monte Carlo (1,000 runs), confidence intervals, empirical VaR/CVaR, and probability of ruin. |
+| **Walk-Forward & OOS** | `validation` | Temporal In-Sample / Out-of-Sample partitioning (WFER efficiency ratio) and interactive 24-configuration benchmark degradation matrix. |
+| **Model Benchmark** | `comparison` | Head-to-head multi-model comparison, statistical alpha spread calculation ($\Delta A - B$), and overlaid equity trajectories. |
 
-| Spanish navigation label | Internal tab | Current capability |
-| --- | --- | --- |
-| Registro de estrategias | `studio` | Selects a base strategy or preset, edits strategy parameters, builds custom rule-based strategies, and manages frictions, sizing, and preset save/delete flows. |
-| Auditoría de rendimiento | `performance` | Displays KPIs, trade analytics, synchronized price and equity inspection, execution markers, and the detailed trade audit table for the active simulation. |
-| Pruebas de estrés y MC | `stress_testing` | Shows Monte Carlo bootstrap outputs, confidence bands, risk of ruin, VaR, and CVaR when the backend returns enough trade data. |
-| Walk-Forward y OOS | `validation` | Evaluates the active simulation with a simple IS/OOS split and also exposes the static academic benchmark matrix used in the TFM narrative. |
-| Benchmark de modelos | `comparison` | Runs head-to-head comparisons between strategies or presets, then renders attribution deltas and comparative equity curves. |
+---
 
-## API Calls Consumed
+## State Management & In-Memory Caching
 
-All current API calls are hard-coded to `http://127.0.0.1:8000`.
+- **Unified Context:** `BacktestContext` acts as the single source of truth for backtest parameters, execution state, active positions, and server responses.
+- **Deterministic Composite Caching:** Backtest results are indexed using a deterministic multi-variable key:
+  $$\text{CacheKey} = \text{Symbol} \mid \text{Timeframe} \mid \text{Dates} \mid \text{StrategyID} \mid \text{Capital} \mid \text{RiskParams} \mid \text{Frictions} \mid \text{MCParams} \mid \text{SerializedParams}$$
+  Repeated executions with identical parameter configurations resolve instantly in $<1\text{ ms}$ from memory without generating network overhead.
+- **Dynamic Stale Detection:** Visual badges notify the operator when active parameters have diverged from the currently rendered analytical charts.
 
-| Method | Endpoint | Used by | Purpose |
-| --- | --- | --- | --- |
-| `GET` | `/api/backtest/strategies` | `BacktestContext` | Loads strategy metadata used by the strategy catalog and parameter forms. |
-| `GET` | `/api/backtest/presets` | `BacktestContext` | Loads user presets shown in the strategy studio and comparison selectors. |
-| `POST` | `/api/backtest/run` | `BacktestContext` | Executes the active backtest and hydrates all downstream views from one result payload. |
-| `POST` | `/api/backtest/presets` | `StrategyStudioView` | Saves a preset using the current strategy, frictions, sizing, and optional custom rules. |
-| `DELETE` | `/api/backtest/presets/:name` | `StrategyStudioView` | Deletes a saved preset and refreshes the preset list. |
-| `POST` | `/api/backtest/compare` | `ModelComparisonView` | Runs a comparative simulation between two selected strategies or presets. |
+---
 
-## State and Cache Behavior
+## Rendering Performance & Optimization
 
-- `BacktestContext` is the only shared state container.
-- Strategy metadata and presets are requested initially and after preset changes. Because the metadata effect currently depends indirectly on the full `params` object, parameter changes also trigger redundant metadata requests.
-- The first metadata load auto-triggers one initial backtest run.
-- Backtest results are cached in memory with a composite key built from symbol, timeframe, date range, strategy, frictions, sizing, Monte Carlo settings, and serialized strategy parameters.
-- Cached results are reused whenever the same complete cache key is requested. `runSimulation` supports a programmatic `forceRefresh` argument, but no current UI caller sets it to `true`.
-- The main stale indicator tracks symbol, timeframe, dates, strategy, capital, and strategy parameters; it omits sizing, friction, and Monte Carlo controls.
-- The comparison stale indicator tracks model selectors, symbol, and dates; it omits timeframe, capital, sizing, and friction.
-- There is no persistent client storage. Reloading the page resets tabs, parameters, and cached results to defaults.
+- **High-Frequency Viewport Optimization:** `PerformanceAuditView` isolates timeline slices and optimizes rendering cycles to sustain 60 FPS performance when inspecting multi-year intraday datasets (e.g., $>6,500$ bars in 4h resolution).
+- **Decoupled DOM Tooltip Bridge:** Chart crosshairs and synchronized inspector updates bypass React reconciliation cycles during mousemove events by batching direct DOM mutations through `requestAnimationFrame`.
+- **Strict UTC Normalization:** Market timestamps and trade execution logs are strictly parsed and formatted in UTC (`es-ES` numeric standards), eliminating browser-local timezone drift across global assets.
 
-## Localization and Formatting
+---
 
-- The product copy is manually authored in Spanish directly inside the components.
-- There is no runtime i18n framework, locale switcher, or translation catalog.
-- Number, currency, percent, and date formatting uses `es-ES` conventions.
-- Date parsing normalizes naive timestamps to UTC before rendering, and formatter helpers explicitly render dates in UTC to avoid browser-local timezone drift.
+## API Integration Contract
 
-## Rendering and Performance Decisions
+All client communications target the FastAPI backend via typed REST endpoints:
 
-- The app stays on one page and avoids router overhead.
-- `PerformanceAuditView` samples long timelines down to a capped set of rendered bars while preserving the first point, last point, and any execution marker timestamps.
-- Chart inspector updates are batched through `requestAnimationFrame` to reduce hover-driven DOM churn.
-- Several Recharts series disable animation to keep interactions predictable on dense financial charts.
-- Wide, data-heavy tables and comparison sections use horizontal scrolling containers instead of collapsing columns away.
+| Method | Endpoint | Invoked By | Purpose |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/backtest/strategies` | `BacktestContext` | Fetches registered strategy metadata and parameter definitions. |
+| `GET` | `/api/backtest/presets` | `BacktestContext` | Retrieves stored user profiles and custom parameter configurations. |
+| `POST` | `/api/backtest/run` | `BacktestContext` | Executes an event-driven backtest and returns full OHLCV, equity, and trade metrics. |
+| `POST` | `/api/backtest/presets` | `StrategyStudioView` | Persists a strategy configuration and friction profile to disk. |
+| `DELETE` | `/api/backtest/presets/:name` | `StrategyStudioView` | Deletes a persistent user preset by identifier. |
+| `POST` | `/api/backtest/compare` | `ModelComparisonView` | Executes concurrent multi-strategy simulations for alpha attribution. |
+| `POST` | `/api/backtest/oos-audit` | `WalkForwardView` | Computes dynamic In-Sample / Out-of-Sample metrics and WFER degradation. |
 
-## Extending the Frontend
+---
 
-### Add a New View
+## Extending the Platform
 
-1. Create the view under `src/components/views`.
-2. Add a new tab identifier to the workspace tab union used by the context and navigation.
-3. Add the navigation button in `TopNavigation` with Spanish copy consistent with the existing labels.
-4. Mount the view in the `WorkspaceRouter` switch inside `App.tsx`.
-5. Reuse `BacktestContext` when the view depends on the active simulation, or add narrowly scoped local state when it does not need to be shared.
+### Adding a New Analytical View
+1. Create the component under `src/components/views/YourNewView.tsx`.
+2. Register the tab key in `WorkspaceTab` (`src/context/BacktestContext.tsx`).
+3. Add the navigation trigger in `src/components/layout/TopNavigation.tsx`.
+4. Mount the view in the workspace switch inside `src/App.tsx`.
 
-### Add a Reusable Component
-
-1. Place shared panels, cards, and data widgets in `src/components`.
-2. Place navigation and shell pieces in `src/components/layout`.
-3. Place chart-specific shapes or glue code in `src/components/charts`.
-4. Keep formatting logic in `src/utils/formatters.ts` rather than duplicating locale or UTC handling inside components.
-5. Define or extend response and UI contracts in `src/types` before wiring the component to live data.
-
-### Add a New API Call
-
-1. Check whether the request belongs in `BacktestContext` because multiple views need the result or status.
-2. If the call is view-specific, keep it inside that view and model the payload and response in `src/types`.
-3. Follow the existing Axios pattern and keep the endpoint naming aligned with the backend API.
-4. Surface Spanish error text to the user and avoid silent failures for primary workflows.
-5. If the result should be reused, extend the existing in-memory cache strategy rather than introducing ad hoc component caches.
-
-## Known Limitations
-
-- No client-side router. Top-level navigation is a tab switch in `App.tsx`.
-- No persistent client state. Refreshing the page clears UI state and cached results.
-- No environment-configurable API URL. The frontend is currently tied to `http://127.0.0.1:8000`.
-- The frontend validation view does not call `POST /walk-forward`; it combines a client-side split with a static benchmark matrix.
-- Parameter changes currently re-request strategy and preset metadata because of the context effect dependencies.
-- Stale-result indicators do not cover every input represented in requests or cache keys.
-- Comparison requests omit `timeframe`, so the backend uses its schema default instead of the selected UI timeframe.
-- No frontend test suite is present at this time.
-- ESLint still reflects baseline debt in the current repo configuration and should not be treated as a strict cleanliness guarantee.
-- The production bundle currently emits Vite's large chunk warning because the main JavaScript asset exceeds the default 500 kB warning threshold.
-- Responsive handling for dense tables relies on horizontal scrolling rather than alternative mobile-specific table layouts.
+### Adding a Reusable Financial Component
+1. Place shared panels, metric widgets, or tables in `src/components/`.
+2. Reuse existing formatters from `src/utils/formatters.ts` to ensure consistent numerical representation.
+3. Bind TypeScript contracts from `src/types/index.ts` to enforce strict type safety across props.

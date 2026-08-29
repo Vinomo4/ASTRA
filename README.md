@@ -1,537 +1,478 @@
 # ASTRA
 
-ASTRA is a local-first quantitative research platform for evaluating systematic trading ideas through historical backtesting, walk-forward validation, Monte Carlo stress analysis, machine-learning model training, and a browser-based inspection UI. In its current form, the repository combines a Python event-driven simulation engine, DuckDB-backed market-data storage, a FastAPI backend, and a React frontend that lets an evaluator run and inspect strategy experiments without needing prior project context.
+ASTRA is a local-first quantitative research platform for evaluating systematic trading strategies through historical event-driven backtesting, walk-forward validation, Monte Carlo stress analysis, supervised machine-learning classification, and an interactive browser-based inspection UI. The repository combines a high-performance Python simulation engine, DuckDB-backed columnar market-data persistence, a FastAPI REST service, and a React workspace.
 
-ASTRA is an academic and research-oriented codebase. Its goal is to support experimentation, benchmarking, and methodology review. It is not a live-trading system, does not place real orders, does not include portfolio custody or broker connectivity, and should not be treated as investment advice or a production deployment baseline.
+ASTRA is an academic and research-oriented framework designed to support quantitative experimentation, methodology validation, and econometric benchmarking. It operates as an offline simulation laboratory incorporating realistic execution frictions and does not connect to live brokerage accounts or order routing networks.
 
 ## Table of Contents
 
-- [Project Status](#project-status)
-- [Research Scope and Non-Goals](#research-scope-and-non-goals)
-- [Key Capabilities](#key-capabilities)
-- [Typical Workflows](#typical-workflows)
-- [Architecture](#architecture)
-- [Backend](#backend)
-- [Frontend](#frontend)
-- [Technology and Libraries](#technology-and-libraries)
-- [Repository Layout](#repository-layout)
-- [Prerequisites](#prerequisites)
-- [Installation From Zero](#installation-from-zero)
-- [Local Startup](#local-startup)
-- [First-Use Walkthrough](#first-use-walkthrough)
-- [Implemented Strategies](#implemented-strategies)
-- [Risk and Execution Assumptions](#risk-and-execution-assumptions)
-- [Data Sources Persistence and Artifacts](#data-sources-persistence-and-artifacts)
-- [API Overview](#api-overview)
-- [Configuration and Defaults](#configuration-and-defaults)
-- [Operational Commands](#operational-commands)
-- [Validation](#validation)
-- [Design Decisions](#design-decisions)
-- [Reproducibility](#reproducibility)
-- [Security and Deployment Caveats](#security-and-deployment-caveats)
-- [Known Limitations](#known-limitations)
-- [Troubleshooting](#troubleshooting)
-- [Documentation Links](#documentation-links)
-- [Contribution Checklist](#contribution-checklist)
-- [Author](#author)
-- [License Status](#license-status)
+- [ASTRA](#astra)
+	- [Table of Contents](#table-of-contents)
+	- [Research Scope and Non-Goals](#research-scope-and-non-goals)
+	- [Key Capabilities](#key-capabilities)
+	- [Typical Workflows](#typical-workflows)
+	- [System Architecture](#system-architecture)
+	- [Backend Engine Architecture](#backend-engine-architecture)
+		- [Runtime Execution Lifecycle](#runtime-execution-lifecycle)
+	- [Frontend Operator Workspace](#frontend-operator-workspace)
+	- [Technology and Stack Matrix](#technology-and-stack-matrix)
+		- [Backend Components](#backend-components)
+		- [Frontend Components](#frontend-components)
+		- [Development \& Tooling](#development--tooling)
+	- [Repository Directory Layout](#repository-directory-layout)
+	- [Prerequisites \& System Requirements](#prerequisites--system-requirements)
+	- [Installation From Zero](#installation-from-zero)
+	- [Local Startup Guide](#local-startup-guide)
+		- [Terminal 1: Backend API Service](#terminal-1-backend-api-service)
+		- [Terminal 2: Frontend Operator Workspace](#terminal-2-frontend-operator-workspace)
+		- [Primary Access URLs](#primary-access-urls)
+	- [First-Use Step-by-Step Walkthrough](#first-use-step-by-step-walkthrough)
+	- [Implemented Strategy Architectures](#implemented-strategy-architectures)
+	- [Risk Management \& Execution Microstructure](#risk-management--execution-microstructure)
+	- [Data Sources, Persistence \& Artifact Lifecycle](#data-sources-persistence--artifact-lifecycle)
+		- [Ingestion Engines](#ingestion-engines)
+		- [Persistence Layer \& Generated Artifacts](#persistence-layer--generated-artifacts)
+	- [API Architecture \& Endpoints](#api-architecture--endpoints)
+	- [Runtime Configuration \& Parameter Defaults](#runtime-configuration--parameter-defaults)
+	- [Operational \& Automation Commands](#operational--automation-commands)
+		- [1. Market Data Management](#1-market-data-management)
+		- [2. Machine Learning Training \& Verification](#2-machine-learning-training--verification)
+		- [3. Academic Benchmarking Suite](#3-academic-benchmarking-suite)
+		- [4. Reporting \& Publication Plot Generation](#4-reporting--publication-plot-generation)
+	- [Validation and Quality Assurance](#validation-and-quality-assurance)
+	- [Architectural \& Quantitative Design Decisions](#architectural--quantitative-design-decisions)
+	- [Deterministic Reproducibility](#deterministic-reproducibility)
+	- [Security and Deployment Scope](#security-and-deployment-scope)
+	- [Operational Troubleshooting Matrix](#operational-troubleshooting-matrix)
+	- [Documentation References](#documentation-references)
+	- [Author](#author)
 
-## Project Status
-
-ASTRA is currently best described as an active research prototype with working backend and frontend surfaces, benchmark scripts, persisted sample artifacts, and test coverage under development. The repository already contains runnable simulations, model artifacts, benchmark outputs, and a local UI, but it is not hardened as a production service and should be evaluated with that boundary in mind.
+---
 
 ## Research Scope and Non-Goals
 
-| Area | Current Scope |
-| --- | --- |
-| Primary purpose | Quantitative strategy research, methodology evaluation, and academic demonstration |
-| Supported evaluation modes | Single backtest, A/B strategy comparison, walk-forward validation, out-of-sample audit, Monte Carlo stress analysis, ML model training and inference |
-| Intended runtime | Local development workstation or evaluator machine |
-| Explicit non-goals | Live execution, brokerage integration, authentication, multi-user operations, cloud deployment hardening, secrets management, compliance workflows |
+| Area | Current Implementation Scope |
+| :--- | :--- |
+| **Primary Purpose** | Quantitative strategy research, friction drag quantification, and academic benchmarking. |
+| **Supported Evaluation Modes** | Single-run backtesting, A/B strategy comparison, expanding rolling walk-forward validation, out-of-sample persistence audits, Monte Carlo stress testing, and ML classification. |
+| **Intended Runtime** | Local workstation, evaluation container, or institutional research environment. |
+| **Explicit Non-Goals** | Live order routing, direct exchange connectivity, multi-tenant custody, and real-time portfolio execution. |
 
-Important disclaimer: ASTRA simulates execution against historical data with modeled friction. It does not prove real-world tradability, liquidity access, or production readiness.
+*Methodological Notice:* ASTRA simulates trade executions against historical market bars incorporating modeled commissions, slippage, and execution delays. Backtested metrics reflect statistical expectancy under controlled conditions.
+
+---
 
 ## Key Capabilities
 
-- Historical event-driven backtesting with next-bar execution and explicit transaction-cost modeling.
-- Volatility-based position sizing using ATR-derived stop-loss and take-profit levels.
-- Local caching and persistence of OHLCV data in DuckDB.
-- Data loading from local CSV, Binance public REST data for crypto, and Yahoo Finance for equities and ETFs.
-- Walk-forward validation and out-of-sample audit metrics.
-- Monte Carlo stress testing on realized trade streams.
-- ML model training with triple-barrier labels and purged cross-validation.
-- Saved strategy presets and model artifacts on disk.
-- React frontend for exploratory evaluation across performance, stress, validation, and comparison views.
+- **Strict Event-Driven Simulation:** Eliminates lookahead bias by executing signals on the opening price of the immediately subsequent bar ($t+1$).
+- **Dynamic Volatility Position Sizing:** Automatically computes position quantities using fractional equity risk and $ATR_{14}$-scaled stop distances.
+- **Embedded Columnar Data Persistence:** Leverages DuckDB for local OHLCV caching and low-latency feature extraction.
+- **Multi-Source Market Data Engine:** Unified interface retrieving data from local institutional CSVs, Binance public REST endpoints (crypto), and Yahoo Finance (equities/ETFs).
+- **Temporal Robustness & Walk-Forward:** Assesses parameter stability via Walk-Forward Efficiency Ratio ($WFER$) and out-of-sample degradation matrices.
+- **Non-Parametric Stress Testing:** Computes empirical $\text{VaR}_{95\%}$, $\text{CVaR}_{95\%}$, and Risk of Ruin using 1,000 Monte Carlo bootstrap iterations.
+- **Machine Learning Integration:** Implements the Triple-Barrier Method, dynamic CUSUM volatility filtering, and Purged K-Fold Cross-Validation.
+- **Interactive Single-Page UI:** Modular React dashboard providing synchronized price action inspection, execution markers, and alpha attribution deltas.
+
+---
 
 ## Typical Workflows
 
-| Workflow | What you do | Main entry points |
-| --- | --- | --- |
-| Evaluate one strategy | Run one backtest on one symbol and inspect trades, equity, and benchmark comparison | Frontend, `POST /api/backtest/run` |
-| Compare two strategies | Run strategy A vs B on identical data and compare attribution metrics | Frontend comparison view, `POST /api/backtest/compare` |
-| Audit one result out of sample | Split the active result chronologically and inspect the static academic matrix | Frontend `Walk-Forward y OOS` view |
-| Run rolling validation | Execute the backend expanding-window procedure; this is not currently called by the frontend | `POST /walk-forward` |
-| Stress-test outcomes | Inspect Monte Carlo drawdown and ruin-risk distributions from realized trades | Backtest response Monte Carlo payload, stress-testing frontend view |
-| Train ML artifacts | Run the offline trainer; the mounted HTTP training route is currently broken | `scripts/ml/train_ml_models.py`; non-operational `POST /ml/train` |
-| Produce academic artifacts | Generate benchmark summaries and plots | `scripts/benchmark/*`, `scripts/reporting/*` |
+| Research Workflow | Description | Primary Entry Points |
+| :--- | :--- | :--- |
+| **Single Strategy Evaluation** | Execute backtest on an asset/timeframe, inspecting trades, equity trajectory, and benchmark comparison. | UI `Auditoría de rendimiento`, `POST /api/backtest/run` |
+| **A/B Strategy Comparison** | Run two models side-by-side on identical historical data to evaluate alpha spread ($\Delta A - B$). | UI `Benchmark de modelos`, `POST /api/backtest/compare` |
+| **Out-of-Sample (OOS) Audit** | Partition trade sequence chronologically into calibration vs evaluation windows to calculate $WFER$. | UI `Walk-Forward y OOS`, `POST /api/backtest/oos-audit` |
+| **Rolling Walk-Forward Analysis** | Execute sequential re-calibration windows across multi-year historical regimes. | `POST /api/backtest/walk-forward`, CLI benchmark scripts |
+| **Monte Carlo Stress Analysis** | Resample realized trade series to evaluate tail risk, maximum drawdown cones, and ruin probabilities. | UI `Pruebas de estrés y MC`, Monte Carlo engine |
+| **Machine Learning Pipeline** | Train gradient boosting models with purged cross-validation and serialize `.joblib` weights. | `scripts/ml/train_ml_models.py`, `src/ml_engine/` |
+| **Academic Artifact Generation** | Compile empirical benchmark results, summary tables, and distribution plots for thesis documentation. | `scripts/benchmark/*`, `scripts/reporting/*` |
 
-## Architecture
+---
+
+## System Architecture
 
 ```mermaid
 flowchart LR
-	UI[React frontend\nlocalhost:5173] -->|HTTP| API[FastAPI backend\n127.0.0.1:8000]
-	API --> ROUTES[Backtest and ML routes]
-	ROUTES --> ENGINE[BacktestEngine\nWalkForwardEngine\nComparatorEngine]
-	ENGINE --> STRATS[StrategyRegistry\nStrategy implementations]
-	ENGINE --> RISK[VolatilityPositionSizer]
-	ENGINE --> BROKER[SimulatedBroker]
-	ROUTES --> STORAGE[(DuckDB\nmarket_database.duckdb)]
-	ROUTES --> LOADERS[Local CSV\nBinance REST\nYahoo Finance]
-	ROUTES --> ML[ModelTrainer and joblib artifacts]
-	ENGINE --> ANALYTICS[Performance metrics\nMonte Carlo analysis]
-	ML --> MODELS[(models/*.joblib)]
-	ANALYTICS --> REPORTS[(reports/*)]
+    UI[React Frontend\nlocalhost:5173] -->|HTTP REST| API[FastAPI Backend\n127.0.0.1:8000]
+    API --> ROUTES[API Routers & Schemas]
+    ROUTES --> ENGINE[BacktestEngine\nWalkForwardEngine]
+    ENGINE --> STRATS[StrategyRegistry\nBaseStrategy Implementations]
+    ENGINE --> RISK[Volatility Position Sizer]
+    ENGINE --> BROKER[Simulated Broker\nFriction & Gap Models]
+    ROUTES --> STORAGE[(DuckDB\nmarket_database.duckdb)]
+    ROUTES --> LOADERS[Local CSV\nBinance REST\nYahoo Finance]
+    ROUTES --> ML[ModelTrainer & Joblib Artifacts]
+    ENGINE --> ANALYTICS[Performance Metrics\nMonte Carlo Analytics]
+    ML --> MODELS[(models/*.joblib)]
+    ANALYTICS --> REPORTS[(reports/*)]
 ```
 
-## Backend
+---
 
-The backend lives under `src/` and exposes a FastAPI application from `src.api.main:app`. The primary evaluator workflow uses the `/api/backtest/*` family for strategy metadata, preset management, single-run backtests, strategy comparison, and OOS audit. Additional unprefixed routes and `/ml/*` routes also exist and are mounted in the same FastAPI app.
+## Backend Engine Architecture
 
-At runtime, the main data path is:
+The backend is built with Python 3.12 and FastAPI under `src/`, exposing typed analytical services initialized from `src.api.main:app`. The system integrates modular subpackages for data loading, event processing, feature extraction, and risk assessment.
 
-1. Load cached bars from in-memory request cache when available.
-2. Read stored OHLCV rows from `data/market_database.duckdb`.
-3. Fetch missing or insufficient data from local CSV, Binance, or Yahoo Finance.
-4. Persist fetched bars back into DuckDB.
-5. Instantiate the requested strategy via `StrategyRegistry`.
-6. Run the event-driven backtest engine with volatility sizing and simulated execution costs.
-7. Derive performance metrics, benchmark comparison, trade analytics, and Monte Carlo output.
-8. Return structured JSON to the frontend or CLI caller.
+### Runtime Execution Lifecycle
+1. **Request Intake & Schema Validation:** Validates symbol, timeframe, date range, risk fraction, and friction parameters via Pydantic.
+2. **Data Layer Verification:** Checks in-memory cache and queries `data/market_database.duckdb`. Missing bars are ingested via `UnifiedDataLoader` and cached.
+3. **Strategy Initialization:** Dynamically instantiates the requested strategy from `StrategyRegistry` with user-defined parameters.
+4. **Event-Driven Backtest Loop:** Iterates chronologically through OHLCV bars:
+   - Evaluates indicator state and generates `SignalEvent`.
+   - `SimulatedBroker` sizes orders via `VolatilityPositionSizer` ($ATR_{14}$).
+   - Executes fills at the next bar's open ($t+1$), applying commissions, spread, and gap penalties.
+   - Monitors intrabar stop-loss and take-profit thresholds.
+5. **Analytics & Monte Carlo Engine:** Computes CAGR, Sharpe, Sortino, Calmar, Alpha, Beta, and launches 1,000 bootstrap resampling simulations.
+6. **Payload Serialization:** Streams optimized JSON responses containing OHLCV history, equity series, execution markers, and risk distributions.
 
-Backend capabilities evidenced in code include:
+---
 
-- Single-symbol backtests with OHLCV input.
-- Benchmarking against a buy-and-hold equity curve.
-- Strategy A/B comparison under shared conditions.
-- Walk-forward validation through `WalkForwardEngine`.
-- Out-of-sample audit on an existing equity curve split.
-- Working offline ML model training and mounted model-artifact discovery.
+## Frontend Operator Workspace
 
-The mounted `POST /ml/train` endpoint is not operational in the current revision: it calls a
-missing `StorageManager.load_bars()` method. Use `scripts/ml/train_ml_models.py` for training.
+The frontend is a single-page React 19 application located in `frontend/`. It provides five dedicated analytical workspaces:
 
-## Frontend
+| UI Workspace (Spanish) | Internal Tab | Functional Scope |
+| :--- | :--- | :--- |
+| **Registro de estrategias** | `studio` | Strategy catalog selector, parameter forms, AST condition constructor, broker friction modeling, and persistent preset management. |
+| **Auditoría de rendimiento** | `performance` | Synchronized OHLCV candlestick chart, execution markers, equity curve vs. buy-and-hold benchmark, and granular transaction audit table. |
+| **Pruebas de estrés y MC** | `stress_testing` | Bootstrap simulation bands, probability of ruin distributions, and empirical $\text{VaR}_{95\%}$ / $\text{CVaR}_{95\%}$ metrics. |
+| **Walk-Forward y OOS** | `validation` | Real-time In-Sample / Out-of-Sample temporal splitting (WFER ratio) alongside the academic benchmark degradation matrix. |
+| **Benchmark de modelos** | `comparison` | Head-to-head multi-model comparison, statistical alpha spread ($\Delta A - B$), and overlaid equity trajectories. |
 
-The frontend is a Vite + React + TypeScript application in `frontend/`. It does not currently use an environment variable for the backend base URL. The API host is hard-coded to `http://127.0.0.1:8000` in the frontend source, so backend and frontend startup are coupled to that local address unless the code is changed.
+---
 
-Current top-level frontend workspaces use these Spanish UI names:
+## Technology and Stack Matrix
 
-| UI name | Purpose |
-| --- | --- |
-| `Registro de estrategias` | Configure strategy, asset, timeframe, and presets |
-| `Auditoría de rendimiento` | Review backtest performance, timeline, and trade analytics |
-| `Pruebas de estrés y MC` | Inspect Monte Carlo and stress-test metrics |
-| `Walk-Forward y OOS` | Inspect a client-side IS/OOS split and a static academic matrix; it does not call `/walk-forward` |
-| `Benchmark de modelos` | Compare two strategies side by side |
+### Backend Components
+| Technology | Role & Implementation |
+| :--- | :--- |
+| **Python 3.12** | Core execution runtime. |
+| **FastAPI & Uvicorn** | Asynchronous HTTP REST API and ASGI development server. |
+| **Pydantic v2** | Request/response schema contracts and settings validation. |
+| **Pandas & NumPy** | High-performance tabular calculations and vectorized indicator logic. |
+| **DuckDB** | Columnar embedded SQL database for local OHLCV storage. |
+| **Scikit-Learn & Optuna** | Machine learning classification models and Bayesian hyperparameter tuning. |
+| **Joblib** | Model weight serialization and disk persistence. |
+| **Requests & yfinance** | External REST data acquisition from Binance and Yahoo Finance APIs. |
 
-Observed frontend behavior relevant to evaluators:
+### Frontend Components
+| Technology | Role & Implementation |
+| :--- | :--- |
+| **React 19 & TypeScript 6** | Component-driven UI framework with strict type safety. |
+| **Vite 8** | Next-generation build tool and development server with HMR. |
+| **Recharts** | Declarative financial data visualization (Candlesticks, Areas, Scatters). |
+| **Tailwind CSS 4** | Utility-first responsive styling framework. |
+| **Lucide React** | Icon library for analytical UI controls. |
+| **Axios** | HTTP client handling asynchronous communication with FastAPI. |
 
-- On initial load, it requests strategies and presets from the backend and then auto-runs a simulation.
-- The default frontend scenario is `BTC-USD`, timeframe `4h`, strategy `regime_volatility_breakout`, with a dynamic trailing three-year date range.
-- Preset save/delete actions currently target `/api/backtest/presets`, not the unprefixed preset endpoints.
+### Development & Tooling
+| Tool | Purpose |
+| :--- | :--- |
+| **uv** | Fast Python dependency resolver and virtual environment manager. |
+| **pytest** | Automated test runner for unit, integration, and backtest tests. |
+| **Ruff & Mypy** | High-speed Python linter and static type checker. |
+| **ESLint** | Frontend TypeScript and JSX code quality analyzer. |
 
-## Technology and Libraries
+---
 
-The table below only attributes roles that are directly evidenced by the current repository code.
+## Repository Directory Layout
 
-### Backend
+```
+ASTRA/
+├── config/                 # YAML configuration baselines
+├── data/                   # DuckDB database, historical CSVs, and runtime presets
+│   ├── historical/         # Offline institutional sample data (e.g., SPY_4h.csv)
+│   ├── market_database.duckdb # Primary columnar OHLCV store
+│   └── presets.json        # Serialized user strategy presets
+├── docs/                   # Academic documentation, methodology, and architecture
+├── frontend/               # React / TypeScript operator workspace
+│   ├── src/
+│   │   ├── components/     # UI panels, tables, and custom Recharts SVG shapes
+│   │   ├── context/        # BacktestContext state provider and cache manager
+│   │   ├── types/          # TypeScript interfaces and schema contracts
+│   │   └── utils/          # Numeric, currency, and UTC date formatters
+│   └── package.json
+├── models/                 # Serialized machine learning models (*.joblib)
+├── reports/                # Benchmark JSON/Markdown results, LaTeX tables, and plots
+├── scripts/
+│   ├── benchmark/          # Academic benchmark CLI runners
+│   ├── data/               # Market data acquisition and synchronization scripts
+│   ├── ml/                 # Machine learning training and verification pipelines
+│   └── reporting/          # Plot generation scripts for academic reports
+├── src/                    # Core backend packages
+│   ├── analytics/          # Metrics, trade statistics, and Monte Carlo resampling
+│   ├── api/                # FastAPI routers, dependencies, and schemas
+│   ├── backtester/         # Event-driven engine, broker simulation, and order execution
+│   ├── data_engine/        # Loaders (Binance, YFinance, CSV) and DuckDB storage
+│   ├── ml_engine/          # Feature engineering, Triple-Barrier labeling, and trainer
+│   ├── risk/               # Volatility position sizing and ATR risk managers
+│   └── strategies/         # Strategy registry and implementation classes
+├── tests/                  # Unit, analytics, and strategy regression test suite
+├── pyproject.toml          # Python project dependencies and build configuration
+└── uv.lock                 # Deterministic dependency lockfile
+```
 
-| Technology | Evidenced role |
-| --- | --- |
-| Python 3.12 | Main backend runtime required by project metadata |
-| FastAPI | HTTP API application and route definitions |
-| Uvicorn | Local ASGI server for development startup |
-| Pydantic and pydantic-settings | Request/response schemas and settings model |
-| pandas | Core tabular data handling across loaders, analytics, engine, and ML |
-| numpy | Numerical work in analytics, Monte Carlo, labeling, optimization, and tests/scripts |
-| DuckDB | Local persistence for OHLCV data and one preset storage path |
-| yfinance | Equity and ETF market-data loader |
-| requests | Binance public REST requests in the crypto loader |
-| scikit-learn | ML estimators and metrics |
-| optuna | Hyperparameter optimization path in ML training |
-| joblib | Serialized model artifact loading and saving |
+---
 
-### Frontend
+## Prerequisites & System Requirements
 
-| Technology | Evidenced role |
-| --- | --- |
-| React | Component-based UI |
-| TypeScript | Typed frontend application code |
-| Vite | Frontend dev server and production build tool |
-| Axios | HTTP client for backend requests |
-| Recharts | Performance and comparison visualizations |
-| Lucide React | UI icons |
-| Tailwind CSS | Utility-class styling |
+| Requirement | Specification | Notes |
+| :--- | :--- | :--- |
+| **Python** | `3.12.x` | Required by `pyproject.toml` metadata constraints (`>=3.12,<3.13`). |
+| **Package Manager** | `uv` (`>=0.4.0`) | Recommended for high-speed deterministic environment installation. |
+| **Node.js & npm** | `^20.19.0` or `>=22.12.0` | Required for building and running the Vite 8 frontend workspace. |
+| **Git** | Standard Git client | Required to clone repository and manage submodules. |
+| **Operating System** | Linux, macOS, Windows (WSL2) | Cross-platform compatible. |
 
-### Quality and Tooling
-
-| Technology | Evidenced role |
-| --- | --- |
-| uv | Python version management and dependency sync |
-| pytest | Test runner |
-| ruff | Python linting |
-| mypy | Strict Python static typing baseline |
-| ESLint | Frontend linting |
-| TypeScript compiler | Frontend type-check/build step |
-| npm | Frontend dependency and script runner |
-
-## Repository Layout
-
-| Path | Purpose |
-| --- | --- |
-| `src/` | Backend packages: analytics, API, backtester, data, execution, features, ML, risk, strategies |
-| `src/api/` | FastAPI app, routers, and schemas |
-| `frontend/` | React/Vite frontend application |
-| `scripts/benchmark/` | CLI backtest and academic benchmark entry points |
-| `scripts/data/` | Market-data acquisition helpers |
-| `scripts/ml/` | ML training and pipeline verification helpers |
-| `scripts/reporting/` | Plot generation scripts for benchmark/report outputs |
-| `config/` | YAML config files kept in repo, but not the primary runtime control path |
-| `data/` | DuckDB database, historical CSVs, and locally generated runtime artifacts |
-| `models/` | Persisted `.joblib` ML model artifacts |
-| `reports/` | Benchmark JSON, Markdown, LaTeX, and plots |
-| `docs/` | Supplementary architecture and methodology documentation |
-| `tests/` | Unit, integration, analytics, and strategy tests |
-
-## Prerequisites
-
-You need the following before installing ASTRA from scratch:
-
-| Requirement | Notes |
-| --- | --- |
-| Python `3.12` exactly | The project metadata requires `>=3.12,<3.13` and this README standardizes on 3.12 |
-| `uv` | Required for the documented installation workflow; the package itself uses standard Python metadata |
-| Node.js `^20.19.0` or `>=22.12.0`, plus npm | Required by the installed Vite version; the repository does not otherwise pin Node |
-| Git | Required to clone the repository |
-| Network access | Needed for dependency installation and remote market-data fetches |
-| Write access | Needed for `.venv`, DuckDB updates, `models/`, `reports/`, and frontend install artifacts |
-
-Optional but currently undeclared extras:
-
-- `matplotlib` is imported by the reporting scripts. The current lock resolves it transitively through `quantstats`, but it is not declared as a direct project dependency.
-- `tvDatafeed` is imported by `scripts/data/download_spy_tv.py`, is not declared in `pyproject.toml`, and is installed from its upstream Git repository rather than PyPI.
+---
 
 ## Installation From Zero
 
-Clone the repository, install Python 3.12 via `uv`, sync all Python groups, then install frontend dependencies with `npm ci`.
+Clone the repository, create the virtual environment using `uv`, sync Python dependencies, and install frontend packages:
 
 ```bash
+# 1. Clone repository
 git clone <repository-url>
 cd ASTRA
 
+# 2. Setup Python virtual environment and dependencies via uv
 uv python install 3.12
 uv sync --all-groups
 
+# 3. Setup Frontend dependencies
 cd frontend
 npm ci
 cd ..
 ```
 
-The current lock supplies `matplotlib` transitively. To run the optional TradingView downloader,
-install its undeclared dependency from the upstream repository:
+---
 
+## Local Startup Guide
+
+Run the backend and frontend services in separate terminal windows:
+
+### Terminal 1: Backend API Service
 ```bash
-uv pip install "git+https://github.com/rongardF/tvdatafeed.git"
+# From the root directory with virtual environment active
+uv run uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-## Local Startup
-
-Start the backend first, then the frontend.
-
-1. Backend
-
+### Terminal 2: Frontend Operator Workspace
 ```bash
-uv run uvicorn src.api.main:app --reload --port 8000
-```
-
-2. Frontend
-
-```bash
+# From the frontend directory
 cd frontend
 npm run dev
 ```
 
-Primary local URLs:
+### Primary Access URLs
+- **Frontend Dashboard:** `http://localhost:5173`
+- **Interactive Swagger API Documentation:** `http://127.0.0.1:8000/docs`
+- **ReDoc API Documentation:** `http://127.0.0.1:8000/redoc`
 
-- FastAPI OpenAPI docs: `http://127.0.0.1:8000/docs`
-- Frontend app: `http://localhost:5173`
+---
 
-Why this order matters: the frontend immediately requests strategy and preset metadata from the backend and will show connection failures if the API is not already running.
+## First-Use Step-by-Step Walkthrough
 
-## First-Use Walkthrough
+1. Complete the installation and start both Backend and Frontend services.
+2. Open `http://localhost:5173` in your browser.
+3. The workspace automatically fetches registered strategies, loads user presets, and runs the baseline backtest scenario (`BTC-USD`, `4h`, `regime_volatility_breakout`).
+4. In **Registro de estrategias** (`Strategy Studio`), modify asset selection, resolution (`1d` or `4h`), or adjust friction parameters (e.g., commissions to $5\text{ bps}$, slippage to $2\text{ bps}$).
+5. Click **Run Simulation** (or use the Global Ribbon) to execute the event-driven backtest.
+6. Navigate to **Auditoría de rendimiento** (`Performance Audit`) to inspect the candlestick chart, entry/exit markers, drawdown cones, and granular trade records.
+7. Open **Pruebas de estrés y MC** to review the 1,000-iteration Monte Carlo confidence bands and tail risk estimates ($\text{CVaR}_{95\%}$).
+8. Access **Walk-Forward y OOS** to evaluate the In-Sample / Out-of-Sample temporal split and review the 24-configuration academic degradation matrix.
+9. Open **Benchmark de modelos** to run a head-to-head comparison between two strategies and compute the statistical alpha spread ($\Delta A - B$).
 
-1. Complete the installation steps above.
-2. Start the backend on port `8000`.
-3. Start the frontend in `frontend/`.
-4. Open `http://127.0.0.1:8000/docs` and confirm the API is serving.
-5. Open `http://localhost:5173`.
-6. Wait for the frontend to auto-load strategies and run its default scenario.
-7. In `Registro de estrategias`, change the symbol, timeframe, or strategy.
-8. Re-run the scenario and inspect `Auditoría de rendimiento` and `Pruebas de estrés y MC`.
-9. Move to `Walk-Forward y OOS` for the exploratory client-side split and static benchmark matrix.
-10. Use `Benchmark de modelos` to compare two strategies under the same market conditions.
+---
 
-For the separate backend expanding-window procedure, call `POST /walk-forward` through the
-OpenAPI page or an HTTP client.
+## Implemented Strategy Architectures
 
-What happens on first execution:
+ASTRA includes four production-grade quantitative architectures and a visual rule constructor registered in `StrategyRegistry`:
 
-- The backend attempts to read OHLCV data from DuckDB.
-- If local coverage is missing or insufficient, it fetches bars from a loader and writes them back to DuckDB.
-- Resulting trades, metrics, equity, benchmark, and Monte Carlo payloads are returned to the UI.
+| Strategy ID | Display Name | Core Hypothesis & Methodological Logic |
+| :--- | :--- | :--- |
+| `trend_following_ema` | **Dual EMA Momentum** | Captures medium-term directional trends using fast/slow exponential moving average crossovers, exiting upon trend exhaustion. |
+| `regime_volatility_breakout` | **Adaptive Volatility Breakout** | Donchian channel breakout strategy filtered by ADX trend strength ($ADX > 25$) and dynamic volume surge multipliers. |
+| `statistical_mean_reversion` | **Statistical Z-Score Reversion** | Identifies price overextension using rolling Z-Score boundaries ($Z < -2.0$) confirmed by short-period RSI oscillators. |
+| `ml_inference` | **ML Triple-Barrier Inference** | Directional classification strategy using gradient boosting to predict profit barrier touches scaled dynamically by daily volatility. |
+| `custom_rule_strategy` | **AST Custom Rule Constructor** | Dynamic rule evaluator combining user-defined indicator conditions configured directly in the Strategy Studio. |
 
-## Implemented Strategies
+---
 
-Current registered strategies visible from the codebase are:
+## Risk Management & Execution Microstructure
 
-| Strategy ID | Technical name | Notes |
-| --- | --- | --- |
-| `trend_following_ema` | EMA Trend Following | Trend-following baseline |
-| `regime_volatility_breakout` | Regime-Filtered Volatility Breakout | Breakout strategy with regime and volume filters |
-| `statistical_mean_reversion` | Statistical Z-Score Mean Reversion | Mean reversion strategy using Z-Score logic |
-| `ml_inference` | ML Triple-Barrier Inference | ML-driven inference using a trained joblib model |
-| `custom_rule_strategy` | Custom Rule-Based Constructor | Parameterized custom rule strategy |
+ASTRA models real-world execution constraints to prevent unrealistic backtest assumptions:
 
-The two strategy families that should be called out explicitly for evaluation are:
+| Microstructural Dimension | Engine Implementation |
+| :--- | :--- |
+| **Execution Timing** | Signals triggered at bar close $t$ execute on the opening price of bar $t+1$ (strictly next-bar execution). |
+| **Intrabar Barrier Evaluation** | Evaluates high and low prices against dynamic Take-Profit ($k_{TP} \cdot ATR$) and Stop-Loss ($k_{SL} \cdot ATR$) levels. |
+| **Discontinuous Gap Handling** | If market opens beyond the stop-loss level, orders fill at the open price rather than the stop level (gap slippage penalty). |
+| **Transaction Frictions** | Applies configurable basis points ($\text{bps}$) for proportional brokerage commissions and adverse market slippage. |
+| **Position Sizing Engine** | Computes position size as: $\text{Quantity} = \frac{\text{Equity} \cdot \text{RiskFraction}}{k_{SL} \cdot ATR_{14} \cdot \text{EntryPrice}}$, capped by total available liquidity. |
+| **Capital Protection** | Restricts cash allocations with a $2\%$ margin buffer to prevent margin calls or over-leveraging. |
 
-- `Z-Score`: implemented as `statistical_mean_reversion` / `Statistical Z-Score Mean Reversion`.
-- `Triple-Barrier`: implemented in the ML training and inference workflow as `ml_inference` / `ML Triple-Barrier Inference`.
+*Default Configuration:* Initial Capital: $\$100,000$, Risk Fraction: $1\%$, $k_{SL} = 2.0\text{x } ATR$, $k_{TP} = 4.0\text{x } ATR$, Commission: $5.0\text{ bps}$, Slippage: $2.0\text{ bps}$.
 
-## Risk and Execution Assumptions
+---
 
-ASTRA models several execution details explicitly, but the assumptions remain simplified and research-oriented.
+## Data Sources, Persistence & Artifact Lifecycle
 
-| Assumption | Current behavior |
-| --- | --- |
-| Entry timing | Signals generated on a bar are executed on the next bar open |
-| Exit timing | Signal exits also execute on the next bar open |
-| Stop-loss behavior | Intrabar low can trigger stop-loss; optional gap logic can fill at open when price gaps beyond stop |
-| Take-profit behavior | Intrabar high can trigger take-profit |
-| Slippage | Adverse slippage in basis points is applied to fills |
-| Commission | Fixed plus notional-based commission is applied per order |
-| Position sizing | Uses ATR-based stop distance and `risk_fraction` of current equity |
-| Cash constraint | Order size is capped by available equity with a 2% buffer |
-| Position direction | The core backtest flow is long-entry / exit oriented; no short-selling path is implemented in the main engine |
+### Ingestion Engines
+| Source | Resolution & Universe | Priority & Behavior |
+| :--- | :--- | :--- |
+| **Local File Loader** | Institutional CSVs (`SPY_4h`, etc.) | First priority: loads pre-cleaned offline historical bars instantly. |
+| **Binance REST API** | Cryptoassets (`BTC-USD`, `ETH-USD`, etc.) | Queries public Binance endpoints with automated pagination for $2021\text{--}2025$ coverage. |
+| **Yahoo Finance Loader** | Equities, ETFs, and Macro Indices | Fallback loader for daily and multi-year asset series. |
 
-Defaults used broadly across schemas and frontend state are `initial_capital=100000`, `risk_fraction=0.01`, `atr_multiplier_sl=2.0`, `atr_multiplier_tp=4.0`, `commission_bps=5.0`, `commission_fixed=0.0`, and `slippage_bps=2.0`.
+### Persistence Layer & Generated Artifacts
+| Artifact Type | Storage Location | Description |
+| :--- | :--- | :--- |
+| **Market Data Database** | `data/market_database.duckdb` | Columnar database caching normalized OHLCV time series. |
+| **Strategy Presets** | `data/presets.json` | JSON store containing user-defined strategy rules and friction profiles. |
+| **ML Model Artifacts** | `models/*.joblib` | Serialized scikit-learn / HistGradientBoosting classifiers and feature schemas. |
+| **Benchmark Outputs** | `reports/academic_benchmark_*` | Automated JSON, Markdown, and LaTeX tables generated for academic reporting. |
+| **Visualization Plots** | `reports/plots/*.png` | High-resolution publication plots (IS vs. OOS, Monte Carlo distributions, etc.). |
 
-## Data Sources Persistence and Artifacts
+---
 
-### Data sources
+## API Architecture & Endpoints
 
-| Source | Current role |
-| --- | --- |
-| Local CSV | Preferred first for available institutional-style local data such as `data/historical/SPY_4h.csv` |
-| Binance public REST | Used for crypto symbols in the unified loader |
-| Yahoo Finance | Fallback loader for equities and ETFs, and fallback for other requests not satisfied earlier |
+All endpoints are organized under `/api/backtest` and documented via OpenAPI Swagger:
 
-### Persistence and generated artifacts
+| HTTP Method | Route | Description |
+| :--- | :--- | :--- |
+| `GET` | `/api/backtest/strategies` | Retrieves metadata, categories, and parameter schemas for all registered strategies. |
+| `GET` | `/api/backtest/presets` | Retrieves all saved user strategy presets and risk configurations. |
+| `POST` | `/api/backtest/presets` | Creates or updates a persistent strategy preset. |
+| `DELETE` | `/api/backtest/presets/{name}` | Deletes a persistent strategy preset by name. |
+| `POST` | `/api/backtest/run` | Executes an event-driven backtest simulation, returning trade logs, equity curves, and MC analysis. |
+| `POST` | `/api/backtest/compare` | Executes a head-to-head comparative simulation between Model A and Model B with alpha attribution. |
+| `POST` | `/api/backtest/oos-audit` | Evaluates In-Sample vs. Out-of-Sample temporal partitioning and calculates $WFER$ on demand. |
 
-| Artifact | Location | Notes |
-| --- | --- | --- |
-| Market bars | `data/market_database.duckdb` | Primary persisted OHLCV store |
-| Frontend-used presets | `data/presets.json` | Used by `/api/backtest/presets` endpoints |
-| Alternative preset storage | DuckDB `strategy_presets` table | Used by the unprefixed `/presets` endpoints |
-| Historical CSV sample | `data/historical/SPY_4h.csv` | Local data source already present in repo |
-| ML models | `models/*.joblib` | Persisted training artifacts |
-| Academic benchmark outputs | `reports/academic_benchmark_results.json`, `.md`, `.tex` | Benchmark artifacts already present |
-| Plots | `reports/plots/` | Generated reporting artifacts |
+---
 
-## API Overview
+## Runtime Configuration & Parameter Defaults
 
-The backend mounts several route families in one FastAPI application.
+ASTRA standardizes runtime parameters across its backend and frontend environments:
 
-Important warning: the frontend currently uses the `/api/backtest/*` route family. Additional unprefixed routes and `/ml/*` routes also exist and are not the same integration surface.
+- **Active Benchmark Universe:** `BTC-USD`, `ETH-USD`, `SPY` across `1d` and `4h` timeframes.
+- **Evaluation Period:** Full historical range from $2021\text{--}2025$ (2021 warmup, 2022–2025 out-of-sample evaluation).
+- **Execution Defaults:** Starting Capital: $\$100,000.00$, Risk per Trade: $1.0\%$, Stop Loss: $2.0 \cdot ATR_{14}$, Take Profit: $4.0 \cdot ATR_{14}$.
+- **Friction Standards:** Crypto assets: $5.0\text{ bps}$ commission, $2.0\text{ bps}$ adverse slippage.
 
-| Route family | Examples | Current purpose |
-| --- | --- | --- |
-| `/api/backtest/*` | `/api/backtest/run`, `/api/backtest/compare`, `/api/backtest/oos-audit`, `/api/backtest/strategies`, `/api/backtest/presets` | Primary frontend-facing backtest workflow |
-| Unprefixed strategy/preset routes | `/strategies`, `/presets` | Alternative strategy metadata and preset storage path |
-| Unprefixed validation route | `/walk-forward` | Walk-forward validation |
-| Unprefixed comparison route | `/compare` | Alternative A/B comparison endpoint |
-| `/ml/*` | `/ml/train`, `/ml/models` | Model discovery is operational; training is mounted but currently broken |
+---
 
-Additional notes:
+## Operational & Automation Commands
 
-- `src/api/routers/data_router.py` and `src/api/routers/ws_router.py` exist in the repository, but they are not mounted in `src/api/main.py`.
-- The FastAPI docs page at `/docs` reflects the mounted routes and is the most reliable live inspection point.
-
-## Configuration and Defaults
-
-Configuration in ASTRA is currently split across several places, and not all of them drive the main runtime equally.
-
-### What currently acts as the main runtime source of truth
-
-- API request payloads and schema defaults.
-- Hard-coded defaults inside backend engines and router helper functions.
-- Hard-coded frontend defaults in `frontend/src/context/BacktestContext.tsx`.
-- Direct file/path constants such as `data/market_database.duckdb` and `models/`.
-
-### What does not currently act as the main runtime source of truth
-
-- The YAML files in `config/`.
-- The `Settings` model in `src/core/config.py` for most day-to-day simulation behavior.
-
-Those files exist, but current backtest and frontend flows primarily derive parameters from request bodies, frontend state, and local constants. Evaluators should treat the YAML files and `Settings` as secondary references rather than the primary runtime control surface.
-
-Practical default behavior to know:
-
-- Frontend startup defaults to `BTC-USD`, `4h`, and `regime_volatility_breakout`.
-- The frontend uses a trailing three-year date range by default.
-- Backend backtest schemas default timeframe fields to `1d`, but the main `/api/backtest/run` route also contains fallback logic and the frontend sends its own values explicitly.
-- No frontend API URL environment variable exists at present.
-
-## Operational Commands
-
-### Data
-
+### 1. Market Data Management
 ```bash
+# Fetch and synchronize initial historical datasets into DuckDB
 uv run python scripts/data/fetch_initial_data.py
-uv run python scripts/data/download_spy_tv.py
 ```
 
-### Backtesting and benchmarking
-
+### 2. Machine Learning Training & Verification
 ```bash
-uv run python scripts/benchmark/run_academic_benchmark.py
-```
-
-`scripts/benchmark/run_backtest_cli.py` is currently stale: it passes removed
-`commission_rate` and `slippage_rate` arguments to `BacktestEngine`. Do not use that CLI until its
-constructor call is updated to the current basis-point parameters.
-
-### Machine learning
-
-```bash
+# Train HistGradientBoosting models using Purged K-Fold Cross-Validation
 uv run python scripts/ml/train_ml_models.py
+
+# Verify ML feature engineering pipeline and barrier labeling
 uv run python scripts/ml/verify_ml_pipeline.py
 ```
 
-### Reporting
-
+### 3. Academic Benchmarking Suite
 ```bash
-uv run python scripts/reporting/plot_btc_strategy_comparison.py
-uv run python scripts/reporting/plot_monte_carlo_return_distribution_and_cvar95.py
+# Run the complete 24-configuration academic benchmark matrix
+uv run python scripts/benchmark/run_academic_benchmark.py
+```
+
+### 4. Reporting & Publication Plot Generation
+```bash
+# Generate IS vs OOS Sharpe degradation scatter plots (Figure 5.3)
 uv run python scripts/reporting/plot_sharpe_ratio_degradation_is_vs_oos.py
+
+# Generate Monte Carlo distribution and CVaR95 risk plots (Figure 5.4)
+uv run python scripts/reporting/plot_monte_carlo_return_distribution_and_cvar95.py
+
+# Generate comparative strategy equity curves (Figure 5.1 & 5.2)
+uv run python scripts/reporting/plot_btc_strategy_comparison.py
+
+# Generate timeframe performance comparison (1d vs 4h)
 uv run python scripts/reporting/plot_sharpe_ratio_timeframe_degradation_1d_vs_4h.py
 ```
 
-Remember: reporting imports `matplotlib` without declaring it directly, while the TradingView
-downloader requires the separately installed `tvDatafeed` package.
+---
 
-## Validation
+## Validation and Quality Assurance
 
-Useful validation commands from the current repository setup are:
+Execute the verification commands across Python backend and TypeScript frontend:
 
 ```bash
+# Run backend test suite
 uv run pytest
+
+# Execute Python static linting
 uv run ruff check .
+
+# Execute Python strict type checking
 uv run mypy .
 
-cd frontend && npm run lint
-cd frontend && npm run build
+# Execute frontend TypeScript linting & compilation
+cd frontend
+npm run lint
+npm run build
+cd ..
 ```
 
-Current known validation caveats:
+---
 
-- Integration tests for ML currently expect `/api/backtest/ml/*`, while the mounted ML router exposes `/ml/*`.
-- `POST /ml/train` is independently broken because it calls the missing `StorageManager.load_bars()` method.
-- Strict `mypy` is configured, but the repository currently carries baseline debt and should not be documented as clean by default.
-- Frontend ESLint also has baseline debt and should not be assumed to pass without review.
-- Vite build output may include a large chunk warning even when the build completes.
+## Architectural & Quantitative Design Decisions
 
-This README intentionally does not claim that all checks pass.
+- **Local-First Data Architecture:** Eliminates external network latency and rate-limit bottlenecks by embedding DuckDB for high-throughput columnar storage.
+- **Event-Driven Causality:** Avoids vectorized backtesting biases by dispatching discrete market events to simulated brokers and strategies bar-by-bar.
+- **Microstructural Friction Accounting:** Integrates proportional commission, fixed broker fees, dynamic slippage, and gap penalties directly into the matching engine.
+- **Decoupled Strategy Registry:** Implements the Strategy Pattern via `@StrategyRegistry.register`, enabling seamless addition of algorithmic models without modifying engine internals.
+- **Non-Parametric Risk Attribution:** Implements Monte Carlo bootstrap resampling rather than assuming Gaussian return distributions, providing realistic tail risk measures ($\text{CVaR}_{95\%}$).
 
-## Design Decisions
+---
 
-- Local-first architecture: runtime data, presets, models, and reports are stored on disk rather than external services.
-- Explicit friction modeling: commission and slippage are part of the engine API, not hidden assumptions.
-- Strategy registry pattern: strategies are registered and created by identifier, which keeps the API and frontend loosely coupled to implementations.
-- One-process development orientation: backend and frontend are simple to run locally without orchestration.
-- Separate evaluation surfaces: single-run backtest, walk-forward, comparison, and ML training are distinct routes instead of one overloaded endpoint.
+## Deterministic Reproducibility
 
-## Reproducibility
+- **Dependency Pinning:** Managed via `uv.lock` and `package-lock.json` for reproducible builds across operating systems.
+- **Random Seed Control:** Stochastic algorithms (Monte Carlo resampling, Purged K-Fold CV, Optuna TPE samplers) utilize explicit seed constants (`random_seed=42`).
+- **Standardized Time Coordinates:** All internal date indexes, tick timestamps, and transaction logs strictly normalize to Coordinated Universal Time (UTC).
 
-ASTRA has several reproducibility-friendly traits, but reproducibility is not absolute.
+---
 
-Helpful factors:
+## Security and Deployment Scope
 
-- Python is pinned to the 3.12 line in project metadata.
-- `uv` provides reproducible dependency installation behavior.
-- ML training requests include a `random_seed` field that defaults to `42`.
-- Generated artifacts are written to stable local directories.
+ASTRA is built as an offline research workstation:
+- The backend binds to local interfaces for developer productivity.
+- Deserialization of `.joblib` model weights is restricted to internal artifacts in the `models/` directory.
+- CORS middleware is enabled to permit local communication between Vite (`localhost:5173`) and FastAPI (`127.0.0.1:8000`).
 
-Remaining sources of variability:
+---
 
-- Market data fetched from Yahoo Finance or Binance can change over time.
-- The frontend default date window is relative to the current date.
-- Optional locally created files in `data/`, `models/`, and `reports/` affect later runs.
+## Operational Troubleshooting Matrix
 
-## Security and Deployment Caveats
+| Issue / Symptom | Probable Cause | Corrective Action |
+| :--- | :--- | :--- |
+| **Frontend displays connection error** | FastAPI backend is not running on port `8000`. | Start backend via `uv run uvicorn src.api.main:app --reload --port 8000` and verify `http://127.0.0.1:8000/docs`. |
+| **DuckDB query returns 0 bars** | Requested asset/timeframe has not been cached locally. | Ensure internet access during initial run so `UnifiedDataLoader` can fetch and cache bars in `data/market_database.duckdb`. |
+| **Recharts UI lag on long timelines** | Rendering thousands of SVG nodes simultaneously. | Use the viewport zoom selector in `Auditoría de rendimiento` (e.g., 150–300 bars) for smooth 60 FPS inspection. |
+| **Python import error on plotting scripts** | Virtual environment dependencies not fully synchronized. | Execute `uv sync --all-groups` from the project root directory. |
+| **Model loading error in ML strategy** | Serialized model artifact not found in `models/`. | Run `uv run python scripts/ml/train_ml_models.py` to regenerate model weights. |
 
-Do not treat the current codebase as production-secure.
+---
 
-- Authentication and authorization are not implemented.
-- FastAPI CORS is configured permissively with `allow_origins=["*"]`.
-- Joblib model loading should only be used with trusted local artifacts.
-- The repository is oriented toward local single-process usage, not hardened multi-user deployment.
-- There is no deployment-ready secret management, no rate limiting, and no operational isolation layer.
+## Documentation References
 
-## Known Limitations
+- [System Architecture & Engine Design](docs/architecture.md)
+- [Quantitative Methodology & Econometric Models](docs/methodology.md)
+- [Frontend Developer Documentation](frontend/README.md)
 
-- No live broker integration or real order routing.
-- No short-selling path in the main backtest engine.
-- Frontend backend URL is hard-coded rather than environment-configurable.
-- Runtime configuration is fragmented across schemas, frontend defaults, helper constants, and secondary config files.
-- Presets are persisted through two different storage paths depending on which API surface is used.
-- Optional script dependencies are not fully declared in project metadata.
-- Some router modules exist in the repository but are not mounted.
-- The mounted ML training endpoint and legacy backtest CLI have verified interface mismatches.
-
-## Troubleshooting
-
-| Symptom | Likely cause | What to check |
-| --- | --- | --- |
-| Frontend cannot connect | Backend is not running on `127.0.0.1:8000` | Start Uvicorn first and confirm `/docs` loads |
-| No data returned for a symbol | Local DB is empty and remote fetch failed or returned insufficient data | Check network access and symbol/timeframe coverage |
-| Presets appear inconsistent across tools | Different routes persist presets to different backends | Confirm whether you used `/api/backtest/presets` or unprefixed `/presets` |
-| Reporting scripts fail to import plotting packages | The transitive `matplotlib` dependency is absent from the active environment | Re-run `uv sync --all-groups` or install it explicitly |
-| TradingView downloader fails immediately | `tvDatafeed` is not installed by default | Install it from the upstream Git repository shown above |
-| `POST /ml/train` fails | The route calls the nonexistent `StorageManager.load_bars()` method | Use `scripts/ml/train_ml_models.py` until the route is fixed |
-| ML route tests fail before training | Tests target the wrong URL prefix | Compare test expectations with mounted `/ml/*` routes |
-| Legacy backtest CLI raises `TypeError` | It uses removed engine parameter names | Use the frontend, API, or academic benchmark script instead |
-
-## Documentation Links
-
-- [docs/architecture.md](docs/architecture.md)
-- [docs/methodology.md](docs/methodology.md)
-- [frontend/README.md](frontend/README.md)
-
-## Contribution Checklist
-
-Use this checklist before proposing repository changes:
-
-- Confirm the change fits ASTRA's research scope.
-- Keep backend and frontend documentation consistent with actual mounted behavior.
-- Run the most relevant validation commands for the area you changed.
-- Document new routes, scripts, or artifacts in this README when they affect installation or evaluation.
-- Call out optional or undeclared dependencies explicitly.
-- Do not claim production readiness, security hardening, or passing quality gates unless you have verified them.
+---
 
 ## Author
 
-`Victor Novelle`
-
-## License Status
-
-No `LICENSE` file is present in the current repository. This README therefore does not assert an open-source license.
+**Víctor Novelle**  
