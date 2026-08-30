@@ -151,7 +151,7 @@ export const ModelComparisonView: React.FC = () => {
     };
 
     try {
-      const res = await axios.post<ComparisonResponse>('http://127.0.0.1:8000/api/backtest/compare', payload);
+      const res = await axios.post<ComparisonResponse>('/api/backtest/compare', payload);
       setCompData(res.data);
       setLastComparedConfig({
         keyA: selectedKeyA,

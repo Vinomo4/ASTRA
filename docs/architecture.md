@@ -148,7 +148,7 @@ sequenceDiagram
 
 | Layer | Primary modules | Current responsibility | Notes |
 | --- | --- | --- | --- |
-| API surface | `src/api/main.py`, `src/api/routers/*`, `src/api/schemas/*` | Mount FastAPI, validate request/response payloads, orchestrate engines | Only one FastAPI app is mounted. Some routers exist but are not included. |
+| API surface | `src/api/main.py`, `src/api/routers/*`, `src/api/schemas/*` | Mount FastAPI, validate request/response payloads, orchestrate engines, and serve compiled React frontend distribution (`frontend/dist`) via SPA fallback. | Only one FastAPI app is mounted. Serves both REST API and compiled SPA assets in a unified process when static distribution exists. |
 | Domain primitives | `src/core/constants.py`, `src/core/events.py`, `src/core/models.py` | Shared event types, enums, position/trade structures | Stable foundation for event-driven flows. |
 | Strategies | `src/strategies/*` | Generate bar-based trading signals and expose metadata | Discovery uses decorator-based registry population on import. |
 | Data engine | `src/data_engine/*` | Load, normalize, cache, and persist OHLCV data and presets | Data and preset persistence are split across DuckDB and JSON. |
@@ -720,6 +720,7 @@ Tradeoff: easy frontend rendering, but larger payloads and duplicated formatting
 
 Current repository reality supports local or simple single-instance deployment only.
 
+- **Single-service deployment:** `src/api/main.py` resolves and mounts `frontend/dist` dynamically when present, enabling unified single-port web hosting (e.g., Render Web Services) alongside standard dual-server development (`npm run dev` + `uvicorn`).
 - Relative file paths assume a writable working directory.
 - In-memory caches are process-local.
 - Generated models and presets are stored on local disk.

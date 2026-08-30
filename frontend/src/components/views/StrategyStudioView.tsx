@@ -326,7 +326,7 @@ export const StrategyStudioView: React.FC = () => {
     };
 
     try {
-      await axios.post('http://127.0.0.1:8000/api/backtest/presets', payload);
+      await axios.post('/api/backtest/presets', payload);
       await reloadPresets();
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
@@ -342,7 +342,7 @@ export const StrategyStudioView: React.FC = () => {
     if (!window.confirm(`¿Eliminar el preajuste de estrategia "${name}"?`)) return;
 
     try {
-      await axios.delete(`http://127.0.0.1:8000/api/backtest/presets/${encodeURIComponent(name)}`);
+      await axios.delete(`/api/backtest/presets/${encodeURIComponent(name)}`);
       await reloadPresets();
     } catch (err) {
       console.error('Failed to delete preset:', err);

@@ -1,41 +1,64 @@
-"""Fetch initial AAPL market data and persist it in DuckDB."""
+"""Fetch benchmark market data (BTC-USD, ETH-USD, SPY) and persist to DuckDB and CSV."""
 
+from pathlib import Path
 import duckdb
 
 from src.core.config import settings
 from src.data_engine.storage_manager import StorageManager
-from src.data_engine.yfinance_loader import YFinanceLoader
+from src.data_engine.unified_loader import UnifiedDataLoader
+
+# Standard ASTRA benchmark universe
+UNIVERSE = [
+    ("BTC-USD", "4h"),
+    ("BTC-USD", "1d"),
+    ("ETH-USD", "4h"),
+    ("ETH-USD", "1d"),
+    ("SPY", "4h"),
+    ("SPY", "1d"),
+]
+
+START_DATE = "2021-01-01"
+END_DATE = "2025-12-31"
 
 
 def main() -> None:
-    """Download AAPL bars, store them, and verify database persistence."""
-    symbol = "AAPL"
-    start_date = "2023-01-01"
-    end_date = "2025-01-01"
-
-    print(f"1. Fetching OHLCV data for {symbol} ({start_date} to {end_date})...")
-    loader = YFinanceLoader()
-    df = loader.fetch_ohlcv(symbol, start=start_date, end=end_date)
-    print(f"   Downloaded {len(df)} bars successfully.")
-
-    print(f"2. Saving records to DuckDB at: {settings.duckdb_path}")
+    """Download OHLCV bars, persist to DuckDB, and export CSVs for offline deployment."""
+    loader = UnifiedDataLoader()
     storage = StorageManager(settings.duckdb_path)
-    storage.save_ohlcv(df)
+    
+    historical_dir = Path("data/historical")
+    historical_dir.mkdir(parents=True, exist_ok=True)
 
-    print("3. Querying stored data back from DuckDB to verify persistence...")
-    loaded_df = storage.load_ohlcv(symbol, start_date, end_date)
-    print(f"   Retrieved {len(loaded_df)} bars from DuckDB.")
+    print(f"1. Fetching dataset universe ({START_DATE} to {END_DATE})...")
+    for symbol, timeframe in UNIVERSE:
+        print(f"   Fetching {symbol} ({timeframe})...")
+        try:
+            df = loader.fetch_ohlcv(symbol, start=START_DATE, end=END_DATE, timeframe=timeframe)
+            if df.empty:
+                print(f"   [WARN] No data returned for {symbol} ({timeframe})")
+                continue
 
-    # Direct SQL check
+            # 1. Save to DuckDB
+            storage.save_ohlcv(df)
+            print(f"   Saved {len(df)} bars to DuckDB.")
+
+            # 2. Export offline CSV for Git / Render deployment
+            clean_sym = symbol.replace("-", "_")
+            csv_path = historical_dir / f"{clean_sym}_{timeframe}.csv"
+            df.to_csv(csv_path, index=False)
+            print(f"   Exported offline file: {csv_path}")
+
+        except Exception as err:
+            print(f"   [ERROR] Failed loading {symbol} ({timeframe}): {err}")
+
+    # Database summary check
+    print("\n2. Database Row Summary:")
     with duckdb.connect(settings.duckdb_path) as conn:
-        count = conn.execute("SELECT COUNT(*) FROM ohlcv WHERE symbol = ?", [symbol]).fetchone()[0]
-        sample = conn.execute(
-            "SELECT * FROM ohlcv WHERE symbol = ? ORDER BY timestamp DESC LIMIT 3", [symbol]
+        summary = conn.execute(
+            "SELECT symbol, timeframe, COUNT(*) as bar_count, MIN(timestamp) as start_ts, MAX(timestamp) as end_ts "
+            "FROM ohlcv GROUP BY symbol, timeframe ORDER BY symbol, timeframe"
         ).df()
-
-    print(f"\nTotal rows in database for {symbol}: {count}")
-    print("\nRecent records:")
-    print(sample)
+    print(summary)
 
 
 if __name__ == "__main__":

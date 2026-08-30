@@ -172,7 +172,7 @@ export const BacktestProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setLoading(true);
       setError(null);
       try {
-        const response = await axios.post('http://127.0.0.1:8000/api/backtest/run', activeParams);
+        const response = await axios.post('/api/backtest/run', activeParams);
         const data = response.data;
         resultsCache.current.set(cacheKey, data);
         setResults(data);
@@ -189,8 +189,8 @@ export const BacktestProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const loadMetadata = useCallback(async () => {
     try {
       const [stratRes, presetRes] = await Promise.all([
-        axios.get('http://127.0.0.1:8000/api/backtest/strategies'),
-        axios.get('http://127.0.0.1:8000/api/backtest/presets'),
+        axios.get('/api/backtest/strategies'),
+        axios.get('/api/backtest/presets'),
       ]);
       setStrategies(stratRes.data.strategies || []);
       setPresets(presetRes.data.presets || []);

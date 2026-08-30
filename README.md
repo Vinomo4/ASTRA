@@ -1,3 +1,16 @@
+---
+title: ASTRA
+emoji: 📊
+colorFrom: blue
+colorTo: indigo
+sdk: gradio
+sdk_version: 4.44.0
+app_file: app.py
+license: mit
+python_version: 3.12
+pinned: false
+---
+
 # ASTRA
 
 ASTRA is a local-first quantitative research platform for evaluating systematic trading strategies through historical event-driven backtesting, walk-forward validation, Monte Carlo stress analysis, supervised machine-learning classification, and an interactive browser-based inspection UI. The repository combines a high-performance Python simulation engine, DuckDB-backed columnar market-data persistence, a FastAPI REST service, and a React workspace.
@@ -23,8 +36,10 @@ ASTRA is an academic and research-oriented framework designed to support quantit
 	- [Prerequisites \& System Requirements](#prerequisites--system-requirements)
 	- [Installation From Zero](#installation-from-zero)
 	- [Local Startup Guide](#local-startup-guide)
-		- [Terminal 1: Backend API Service](#terminal-1-backend-api-service)
-		- [Terminal 2: Frontend Operator Workspace](#terminal-2-frontend-operator-workspace)
+		- [Dual-Process Development Workflow (Recommended for Active Development)](#dual-process-development-workflow-recommended-for-active-development)
+			- [Terminal 1: Backend API Service](#terminal-1-backend-api-service)
+			- [Terminal 2: Frontend Operator Workspace](#terminal-2-frontend-operator-workspace)
+		- [Single-Process Production Preview](#single-process-production-preview)
 		- [Primary Access URLs](#primary-access-urls)
 	- [First-Use Step-by-Step Walkthrough](#first-use-step-by-step-walkthrough)
 	- [Implemented Strategy Architectures](#implemented-strategy-architectures)
@@ -43,6 +58,7 @@ ASTRA is an academic and research-oriented framework designed to support quantit
 	- [Architectural \& Quantitative Design Decisions](#architectural--quantitative-design-decisions)
 	- [Deterministic Reproducibility](#deterministic-reproducibility)
 	- [Security and Deployment Scope](#security-and-deployment-scope)
+		- [Cloud Web Service Configuration (Render / PaaS)](#cloud-web-service-configuration-render--paas)
 	- [Operational Troubleshooting Matrix](#operational-troubleshooting-matrix)
 	- [Documentation References](#documentation-references)
 	- [Author](#author)
@@ -249,23 +265,35 @@ cd ..
 
 ## Local Startup Guide
 
-Run the backend and frontend services in separate terminal windows:
+### Dual-Process Development Workflow (Recommended for Active Development)
+Run the backend and frontend services in separate terminal windows with hot reloading:
 
-### Terminal 1: Backend API Service
+#### Terminal 1: Backend API Service
 ```bash
 # From the root directory with virtual environment active
 uv run uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### Terminal 2: Frontend Operator Workspace
+#### Terminal 2: Frontend Operator Workspace
 ```bash
 # From the frontend directory
 cd frontend
 npm run dev
 ```
 
+### Single-Process Production Preview
+Build the React production bundle and run the entire unified stack on port 8000:
+```bash
+# 1. Build frontend distribution assets
+cd frontend && npm run build && cd ..
+
+# 2. Start unified FastAPI server
+uv run uvicorn src.api.main:app --host 0.0.0.0 --port 8000
+```
+
 ### Primary Access URLs
-- **Frontend Dashboard:** `http://localhost:5173`
+- **Frontend Dashboard (Dev Server):** `http://localhost:5173`
+- **Unified Web Platform (Production):** `http://localhost:8000`
 - **Interactive Swagger API Documentation:** `http://127.0.0.1:8000/docs`
 - **ReDoc API Documentation:** `http://127.0.0.1:8000/redoc`
 
@@ -446,10 +474,16 @@ cd ..
 
 ## Security and Deployment Scope
 
-ASTRA is built as an offline research workstation:
-- The backend binds to local interfaces for developer productivity.
+ASTRA is built primarily as a research workstation, with single-service production deployment capabilities:
+- The backend binds to local interfaces or dynamic container ports (`$PORT`) for host flexibility.
 - Deserialization of `.joblib` model weights is restricted to internal artifacts in the `models/` directory.
-- CORS middleware is enabled to permit local communication between Vite (`localhost:5173`) and FastAPI (`127.0.0.1:8000`).
+- Static file routing resolves `frontend/dist` automatically, allowing unified deployment on cloud providers (e.g., Render Web Service).
+- CORS middleware is enabled to permit communication across local Vite (`localhost:5173`) and FastAPI (`127.0.0.1:8000`) instances.
+
+### Cloud Web Service Configuration (Render / PaaS)
+- **Runtime:** `Python 3.12`
+- **Build Command:** `cd frontend && npm install && npm run build && cd .. && uv sync --no-dev`
+- **Start Command:** `uv run uvicorn src.api.main:app --host 0.0.0.0 --port $PORT`
 
 ---
 

@@ -17,7 +17,7 @@ This document complements the core architecture documentation in [../docs/archit
 
 - **Node.js:** `^20.19.0` or `>=22.12.0` (aligned with Vite 8 requirements)
 - **Package Manager:** `npm`
-- **ASTRA Backend:** Running locally at `http://127.0.0.1:8000`
+- **ASTRA Backend:** Running locally at `http://127.0.0.1:8000` (for active Vite HMR development) or serving the compiled bundle directly on port `8000` / `$PORT` in production.
 
 ## Build & Tooling Scripts
 
@@ -27,16 +27,16 @@ From the `frontend` directory, the following commands are available:
 # Install exact dependency tree
 npm ci
 
-# Start Vite development server with HMR (Hot Module Replacement)
+# Start Vite development server with HMR (Hot Module Replacement) at http://localhost:5173
 npm run dev
 
-# Compile TypeScript and generate optimized production bundle
+# Compile TypeScript and generate production bundle in frontend/dist (mounted by FastAPI)
 npm run build
 
 # Run linter across the entire TypeScript/TSX codebase
 npm run lint
 
-# Locally preview the compiled production build
+# Locally preview the Vite production build
 npm run preview
 ```
 
